@@ -290,7 +290,7 @@ async function generateWithSiliconFlow(
     config: ImageGenerationConfig
 ): Promise<GeneratedImage> {
     const endpoint = config.apiEndpoint || 'https://api.siliconflow.cn/v1/images/generations';
-    const model = config.model || 'stabilityai/stable-diffusion-3-5-large';
+    const model = config.model || 'black-forest-labs/FLUX.1-schnell';
 
     const response = await fetch(endpoint, {
         method: 'POST',
@@ -302,17 +302,26 @@ async function generateWithSiliconFlow(
             model: model,
             prompt: prompt,
             image_size: '1024x1024',
+            batch_size: 1,
+            num_inference_steps: 20,
         }),
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || '图片生成失败');
+        const error = await response.json().catch(() => ({}));
+        const message = error.error?.message || error.message || error.detail || `请求失败: ${response.status}`;
+        throw new Error(`SiliconFlow: ${message}`);
     }
 
     const data = await response.json();
+    const imageUrl = data.images?.[0]?.url || data.data?.[0]?.url;
+
+    if (!imageUrl) {
+        throw new Error('SiliconFlow: 未能获取图片 URL');
+    }
+
     return {
-        url: data.images?.[0]?.url || data.data?.[0]?.url,
+        url: imageUrl,
         alt: prompt.slice(0, 100),
     };
 }
@@ -536,9 +545,9 @@ export const IMAGE_PROVIDERS = [
     {
         value: 'siliconflow',
         label: 'SiliconFlow 硅基流动',
-        description: '国内高性价比图片生成，支持多种模型',
+        description: '国内高性价比图片生成，FLUX.1-schnell 免费',
         endpoint: 'https://api.siliconflow.cn/v1/images/generations',
-        models: ['stabilityai/stable-diffusion-3-5-large', 'black-forest-labs/FLUX.1-schnell', 'stabilityai/stable-diffusion-xl-base-1.0'],
+        models: ['black-forest-labs/FLUX.1-schnell', 'stabilityai/stable-diffusion-3-5-large', 'Kwai-Kolors/Kolors'],
     },
     {
         value: 'replicate',

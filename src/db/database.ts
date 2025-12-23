@@ -70,6 +70,18 @@ export interface Keyword {
     created_at: string;
 }
 
+// 文章主题类型
+export interface Topic {
+    id: string;
+    user_id: string;
+    title: string;           // 主题标题
+    description: string;     // 主题描述/大纲
+    keywords: string;        // 相关关键词
+    category: string;        // 分类
+    used: boolean;           // 是否已使用
+    created_at: string;
+}
+
 // 创建 Dexie 数据库
 const db = new Dexie('WordPressCMS') as Dexie & {
     users: EntityTable<LocalUser, 'id'>;
@@ -78,16 +90,18 @@ const db = new Dexie('WordPressCMS') as Dexie & {
     ai_settings: EntityTable<AISettings, 'id'>;
     article_templates: EntityTable<ArticleTemplate, 'id'>;
     keywords: EntityTable<Keyword, 'id'>;
+    topics: EntityTable<Topic, 'id'>;
 };
 
 // 定义数据库版本和表结构
-db.version(4).stores({
+db.version(5).stores({
     users: 'id, email, role, created_at',
     wordpress_sites: 'id, user_id, site_name, status, created_at',
     articles: 'id, user_id, site_id, title, status, created_at',
     ai_settings: 'id, user_id',
     article_templates: 'id, user_id, name, created_at',
-    keywords: 'id, user_id, keyword, group_name, use_count'
+    keywords: 'id, user_id, keyword, group_name, use_count',
+    topics: 'id, user_id, title, category, used, created_at'
 });
 
 export { db };
@@ -101,3 +115,4 @@ export function generateId(): string {
 export function getTimestamp(): string {
     return new Date().toISOString();
 }
+

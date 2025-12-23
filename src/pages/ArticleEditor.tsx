@@ -31,8 +31,9 @@ import {
 } from "@/db/api";
 import { getEffectiveAISettings } from "@/db/aiSettings";
 import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
+import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
 import type { ArticleInput, WordPressSite } from "@/types/types";
-import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe } from "lucide-react";
+import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb } from "lucide-react";
 import { sendChatStream } from "@/utils/aiChat";
 import { publishToWordPress } from "@/utils/wordpress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,7 +48,9 @@ export default function ArticleEditor() {
 
   const [sites, setSites] = useState<WordPressSite[]>([]);
   const [templates, setTemplates] = useState<ArticleTemplate[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<ArticleTemplate | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [loading, setLoading] = useState(!isNew);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -66,6 +69,7 @@ export default function ArticleEditor() {
   useEffect(() => {
     loadSites();
     loadTemplates();
+    loadTopics();
     if (!isNew && id) {
       loadArticle(id);
     }
@@ -85,6 +89,29 @@ export default function ArticleEditor() {
     } catch (error) {
       console.error("加载模板失败:", error);
     }
+  };
+
+  const loadTopics = async () => {
+    if (!user?.id) return;
+    try {
+      const data = await getUnusedTopics(user.id);
+      setTopics(data);
+    } catch (error) {
+      console.error("加载主题失败:", error);
+    }
+  };
+
+  const handleSelectTopic = (topic: Topic) => {
+    setSelectedTopic(topic);
+    // 自动填充关键词
+    if (topic.keywords) {
+      form.setValue("keywords", topic.keywords);
+    }
+    // 自动填充标题
+    if (topic.title) {
+      form.setValue("title", topic.title);
+    }
+    toast.success(`已选择主题: ${topic.title}`);
   };
 
   const loadSites = async () => {
@@ -195,9 +222,15 @@ export default function ArticleEditor() {
           setCurrentContent(content);
           form.setValue("content", content);
         },
-        onComplete: () => {
+        onComplete: async () => {
           toast.success("文章生成完成");
           setGenerating(false);
+          // 如果选择了主题，标记为已使用
+          if (selectedTopic) {
+            await markTopicAsUsed(selectedTopic.id);
+            setSelectedTopic(null);
+            await loadTopics(); // 刷新主题列表
+          }
         },
         onError: (error: Error) => {
           toast.error("生成失败: " + error.message);
@@ -403,6 +436,40 @@ export default function ArticleEditor() {
               <CardContent>
                 <Form {...form}>
                   <form className="space-y-4">
+                    {/* 主题选择 */}
+                    {topics.length > 0 && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium flex items-center gap-2">
+                          <Lightbulb className="h-4 w-4 text-amber-500" />
+                          从主题库选择
+                        </label>
+                        <Select
+                          onValueChange={(value) => {
+                            const topic = topics.find(t => t.id === value);
+                            if (topic) {
+                              handleSelectTopic(topic);
+                            }
+                          }}
+                          value={selectedTopic?.id || ""}
+                        >
+                          <SelectTrigger className="text-sm">
+                            <SelectValue placeholder="选择一个主题（可选）" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {topics.map((topic) => (
+                              <SelectItem key={topic.id} value={topic.id}>
+                                <div className="truncate max-w-[200px]">{topic.title}</div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedTopic && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {selectedTopic.description}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <FormField
                       control={form.control}
                       name="keywords"

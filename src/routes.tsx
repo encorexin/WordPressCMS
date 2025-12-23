@@ -9,6 +9,7 @@ import AISettings from "./pages/AISettings";
 import DataManagement from "./pages/DataManagement";
 import Templates from "./pages/Templates";
 import Keywords from "./pages/Keywords";
+import Topics from "./pages/Topics";
 import type { ReactNode } from "react";
 
 export interface RouteConfig {
@@ -60,6 +61,13 @@ const routes: RouteConfig[] = [
     path: "/articles/:id",
     element: <ArticleEditor />,
     visible: false,
+    requireAuth: true,
+  },
+  {
+    name: "主题库",
+    path: "/topics",
+    element: <Topics />,
+    visible: true,
     requireAuth: true,
   },
   {

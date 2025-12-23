@@ -41,13 +41,29 @@ export function LocalAuthProvider({ children, whiteList = [] }: LocalAuthProvide
     // 初始化：检查现有会话
     useEffect(() => {
         const initAuth = async () => {
-            const currentUser = getCurrentUser();
-            if (currentUser) {
-                // 刷新会话以验证用户仍然有效
-                const refreshedUser = await refreshSession();
-                setUser(refreshedUser);
+            try {
+                // 首先检查 localStorage 中是否有会话
+                const currentUser = getCurrentUser();
+                if (currentUser) {
+                    // 立即设置用户（避免闪烁）
+                    setUser(currentUser);
+
+                    // 异步刷新会话以获取最新数据
+                    const refreshedUser = await refreshSession();
+                    if (refreshedUser) {
+                        setUser(refreshedUser);
+                    }
+                }
+            } catch (error) {
+                console.error('初始化认证失败:', error);
+                // 即使刷新失败，也保留当前会话
+                const currentUser = getCurrentUser();
+                if (currentUser) {
+                    setUser(currentUser);
+                }
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
         initAuth();
     }, []);

@@ -112,12 +112,46 @@ export async function refreshSession(): Promise<LocalUser | null> {
     const currentUser = getCurrentUser();
     if (!currentUser) return null;
 
-    const user = await db.users.get(currentUser.id);
-    if (user) {
-        setSession(user);
-        return user;
-    }
+    try {
+        // 尝试从数据库获取最新用户信息
+        const user = await db.users.get(currentUser.id);
 
-    clearSession();
-    return null;
+        if (user) {
+            // 用户存在，更新会话
+            setSession(user);
+            return user;
+        }
+
+        // 用户 ID 不存在，尝试通过邮箱查找（可能是数据库重建）
+        if (currentUser.email) {
+            const userByEmail = await db.users.where('email').equals(currentUser.email).first();
+            if (userByEmail) {
+                setSession(userByEmail);
+                return userByEmail;
+            }
+        }
+
+        // 数据库中确实没有该用户，但保留会话信息
+        // 这样用户不会突然被踢出，除非明确无法验证
+        console.warn('用户在数据库中未找到，保留当前会话');
+        return currentUser;
+    } catch (error) {
+        // 数据库访问出错，保留当前会话而不是踢出用户
+        console.error('刷新会话时出错:', error);
+        return currentUser;
+    }
 }
+
+// 验证会话是否有效（严格模式）
+export async function validateSession(): Promise<boolean> {
+    const currentUser = getCurrentUser();
+    if (!currentUser) return false;
+
+    try {
+        const user = await db.users.get(currentUser.id);
+        return !!user;
+    } catch {
+        return false;
+    }
+}
+

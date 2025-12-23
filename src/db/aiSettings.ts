@@ -28,7 +28,16 @@ export async function getAISettings(userId: string): Promise<AISettings | null> 
 // 保存或更新 AI 设置
 export async function saveAISettings(
     userId: string,
-    settings: { api_endpoint: string; api_key: string; model: string; system_prompt: string }
+    settings: {
+        api_endpoint: string;
+        api_key: string;
+        model: string;
+        system_prompt: string;
+        image_provider?: 'openai' | 'aliyun' | 'zhipu' | 'stability' | 'baidu' | '';
+        image_api_key?: string;
+        image_model?: string;
+        image_enabled?: boolean;
+    }
 ): Promise<AISettings> {
     const existing = await db.ai_settings.where('user_id').equals(userId).first();
 
@@ -37,7 +46,7 @@ export async function saveAISettings(
             ...settings,
             updated_at: getTimestamp(),
         });
-        return { ...existing, ...settings, updated_at: getTimestamp() };
+        return { ...existing, ...settings, updated_at: getTimestamp() } as AISettings;
     } else {
         const newSettings: AISettings = {
             id: generateId(),
@@ -45,7 +54,7 @@ export async function saveAISettings(
             ...settings,
             created_at: getTimestamp(),
             updated_at: getTimestamp(),
-        };
+        } as AISettings;
         await db.ai_settings.add(newSettings);
         return newSettings;
     }
@@ -68,6 +77,25 @@ export async function getEffectiveAISettings(userId: string): Promise<{
         };
     }
     return DEFAULT_AI_SETTINGS;
+}
+
+// 获取图片生成设置
+export async function getImageSettings(userId: string): Promise<{
+    enabled: boolean;
+    provider: string;
+    apiKey: string;
+    model: string;
+} | null> {
+    const settings = await getAISettings(userId);
+    if (settings && settings.image_enabled && settings.image_api_key) {
+        return {
+            enabled: true,
+            provider: settings.image_provider || 'openai',
+            apiKey: settings.image_api_key,
+            model: settings.image_model || '',
+        };
+    }
+    return null;
 }
 
 // 测试 AI API 连接
@@ -115,3 +143,4 @@ export async function testAIConnection(settings: {
 export function getDefaultSystemPrompt(): string {
     return DEFAULT_SYSTEM_PROMPT;
 }
+

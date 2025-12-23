@@ -33,10 +33,13 @@ import { getEffectiveAISettings } from "@/db/aiSettings";
 import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
 import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
 import type { ArticleInput, WordPressSite } from "@/types/types";
-import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb } from "lucide-react";
+import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb, ImagePlus } from "lucide-react";
 import { sendChatStream } from "@/utils/aiChat";
 import { publishToWordPress } from "@/utils/wordpress";
+import { generateImage, insertImageToContent, generateImagePrompt, IMAGE_PROVIDERS, type ImageGenerationConfig } from "@/utils/imageGeneration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Streamdown } from "streamdown";
 
 
@@ -53,8 +56,14 @@ export default function ArticleEditor() {
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [loading, setLoading] = useState(!isNew);
   const [generating, setGenerating] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [currentContent, setCurrentContent] = useState("");
+  const [showImageDialog, setShowImageDialog] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [imageProvider, setImageProvider] = useState<string>("openai");
+  const [imageApiKey, setImageApiKey] = useState("");
+  const [imageStatus, setImageStatus] = useState("");
 
   const form = useForm<ArticleInput>({
     defaultValues: {
@@ -122,6 +131,54 @@ export default function ArticleEditor() {
       console.error("加载站点失败:", error);
     }
   };
+
+  const openImageDialog = () => {
+    const keywords = form.getValues("keywords");
+    const title = form.getValues("title");
+    const prompt = generateImagePrompt(keywords || "", title || "");
+    setImagePrompt(prompt);
+    setShowImageDialog(true);
+  };
+
+  const handleGenerateImage = async () => {
+    if (!imageApiKey) {
+      toast.error("请输入图片生成 API Key");
+      return;
+    }
+
+    if (!imagePrompt) {
+      toast.error("请输入图片描述");
+      return;
+    }
+
+    try {
+      setGeneratingImage(true);
+      setImageStatus("正在生成图片...");
+
+      const config: ImageGenerationConfig = {
+        provider: imageProvider as ImageGenerationConfig["provider"],
+        apiKey: imageApiKey,
+      };
+
+      const result = await generateImage(imagePrompt, config, setImageStatus);
+
+      // 将图片插入到文章内容中
+      const currentContent = form.getValues("content") || "";
+      const newContent = insertImageToContent(currentContent, result.url, result.alt);
+      form.setValue("content", newContent);
+      setCurrentContent(newContent);
+
+      toast.success("图片已插入到文章开头");
+      setShowImageDialog(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "图片生成失败";
+      toast.error(message);
+      setImageStatus(`错误: ${message}`);
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
 
   const loadArticle = async (articleId: string) => {
     try {
@@ -541,6 +598,16 @@ export default function ArticleEditor() {
                         </>
                       )}
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={openImageDialog}
+                      disabled={generating || generatingImage}
+                    >
+                      <ImagePlus className="mr-2 h-4 w-4" />
+                      生成配图
+                    </Button>
                   </form>
                 </Form>
               </CardContent>
@@ -591,6 +658,92 @@ export default function ArticleEditor() {
           </div>
         </div>
       </div>
+
+      {/* 图片生成对话框 */}
+      <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ImagePlus className="h-5 w-5" />
+              AI 生成配图
+            </DialogTitle>
+            <DialogDescription>
+              使用 AI 为文章生成配图
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>图片生成服务</Label>
+              <Select value={imageProvider} onValueChange={setImageProvider}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {IMAGE_PROVIDERS.map((provider) => (
+                    <SelectItem key={provider.value} value={provider.value}>
+                      {provider.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.description}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>API Key</Label>
+              <Input
+                type="password"
+                placeholder="输入对应服务的 API Key"
+                value={imageApiKey}
+                onChange={(e) => setImageApiKey(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>图片描述</Label>
+              <Textarea
+                placeholder="描述你想要的图片..."
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+
+            {imageStatus && (
+              <div className="text-sm text-muted-foreground bg-gray-100 dark:bg-gray-800 p-2 rounded">
+                {imageStatus}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImageDialog(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={handleGenerateImage}
+              disabled={generatingImage}
+              className="bg-gradient-to-r from-green-500 to-teal-500"
+            >
+              {generatingImage ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  生成中...
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="mr-2 h-4 w-4" />
+                  生成图片
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

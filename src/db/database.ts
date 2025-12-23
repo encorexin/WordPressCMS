@@ -45,6 +45,11 @@ export interface AISettings {
     api_key: string;
     model: string;
     system_prompt: string;
+    // 图片生成设置
+    image_provider?: 'openai' | 'aliyun' | 'zhipu' | 'stability' | 'baidu' | '';
+    image_api_key?: string;
+    image_model?: string;
+    image_enabled?: boolean;
     created_at: string;
     updated_at: string;
 }

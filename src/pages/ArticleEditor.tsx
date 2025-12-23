@@ -63,6 +63,8 @@ export default function ArticleEditor() {
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageProvider, setImageProvider] = useState<string>("openai");
   const [imageApiKey, setImageApiKey] = useState("");
+  const [imageEndpoint, setImageEndpoint] = useState("");
+  const [imageModel, setImageModel] = useState("");
   const [imageStatus, setImageStatus] = useState("");
 
   const form = useForm<ArticleInput>({
@@ -151,6 +153,11 @@ export default function ArticleEditor() {
       return;
     }
 
+    if (imageProvider === 'custom' && !imageEndpoint) {
+      toast.error("自定义端点需要提供 API 端点");
+      return;
+    }
+
     try {
       setGeneratingImage(true);
       setImageStatus("正在生成图片...");
@@ -158,6 +165,8 @@ export default function ArticleEditor() {
       const config: ImageGenerationConfig = {
         provider: imageProvider as ImageGenerationConfig["provider"],
         apiKey: imageApiKey,
+        apiEndpoint: imageEndpoint || undefined,
+        model: imageModel || undefined,
       };
 
       const result = await generateImage(imagePrompt, config, setImageStatus);
@@ -675,7 +684,14 @@ export default function ArticleEditor() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>图片生成服务</Label>
-              <Select value={imageProvider} onValueChange={setImageProvider}>
+              <Select value={imageProvider} onValueChange={(v) => {
+                setImageProvider(v);
+                // 设置默认端点
+                const provider = IMAGE_PROVIDERS.find(p => p.value === v);
+                if (provider && provider.endpoint) {
+                  setImageEndpoint(provider.endpoint);
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -690,6 +706,31 @@ export default function ArticleEditor() {
               <p className="text-xs text-muted-foreground">
                 {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.description}
               </p>
+            </div>
+
+            {/* 自定义端点输入 */}
+            <div className="space-y-2">
+              <Label>API 端点 {imageProvider === 'custom' ? '*' : '(可选)'}</Label>
+              <Input
+                placeholder={IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.endpoint || "输入 API 端点"}
+                value={imageEndpoint}
+                onChange={(e) => setImageEndpoint(e.target.value)}
+              />
+            </div>
+
+            {/* 模型选择 */}
+            <div className="space-y-2">
+              <Label>模型 (可选)</Label>
+              <Input
+                placeholder={IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.[0] || "使用默认模型"}
+                value={imageModel}
+                onChange={(e) => setImageModel(e.target.value)}
+              />
+              {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.length ? (
+                <p className="text-xs text-muted-foreground">
+                  可用模型: {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.join(', ')}
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-2">

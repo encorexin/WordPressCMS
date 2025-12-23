@@ -1,7 +1,7 @@
 // AI 图片生成服务 - 支持多种 API
 
 export interface ImageGenerationConfig {
-    provider: 'openai' | 'aliyun' | 'baidu' | 'stability' | 'zhipu';
+    provider: 'openai' | 'aliyun' | 'baidu' | 'stability' | 'zhipu' | 'siliconflow' | 'replicate' | 'custom';
     apiKey: string;
     apiEndpoint?: string;
     model?: string;
@@ -284,6 +284,150 @@ async function generateWithBaidu(
     throw new Error('图片生成超时');
 }
 
+// SiliconFlow 生成 (OpenAI 兼容格式)
+async function generateWithSiliconFlow(
+    prompt: string,
+    config: ImageGenerationConfig
+): Promise<GeneratedImage> {
+    const endpoint = config.apiEndpoint || 'https://api.siliconflow.cn/v1/images/generations';
+    const model = config.model || 'stabilityai/stable-diffusion-3-5-large';
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+            model: model,
+            prompt: prompt,
+            image_size: '1024x1024',
+        }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || '图片生成失败');
+    }
+
+    const data = await response.json();
+    return {
+        url: data.images?.[0]?.url || data.data?.[0]?.url,
+        alt: prompt.slice(0, 100),
+    };
+}
+
+// Replicate 生成
+async function generateWithReplicate(
+    prompt: string,
+    config: ImageGenerationConfig
+): Promise<GeneratedImage> {
+    const endpoint = config.apiEndpoint || 'https://api.replicate.com/v1/predictions';
+    const model = config.model || 'stability-ai/stable-diffusion-3';
+
+    // 创建预测
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+            version: model,
+            input: {
+                prompt: prompt,
+                width: 1024,
+                height: 1024,
+            },
+        }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '图片生成失败');
+    }
+
+    const prediction = await response.json();
+
+    // 轮询获取结果
+    let attempts = 0;
+    const maxAttempts = 60;
+
+    while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const statusResponse = await fetch(prediction.urls.get, {
+            headers: {
+                'Authorization': `Bearer ${config.apiKey}`,
+            },
+        });
+
+        const statusData = await statusResponse.json();
+
+        if (statusData.status === 'succeeded') {
+            const output = statusData.output;
+            const imageUrl = Array.isArray(output) ? output[0] : output;
+            return {
+                url: imageUrl,
+                alt: prompt.slice(0, 100),
+            };
+        } else if (statusData.status === 'failed') {
+            throw new Error(statusData.error || '图片生成失败');
+        }
+
+        attempts++;
+    }
+
+    throw new Error('图片生成超时');
+}
+
+// 自定义端点生成 (OpenAI 兼容格式)
+async function generateWithCustom(
+    prompt: string,
+    config: ImageGenerationConfig
+): Promise<GeneratedImage> {
+    if (!config.apiEndpoint) {
+        throw new Error('自定义端点需要提供 API 端点');
+    }
+
+    const response = await fetch(config.apiEndpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+            model: config.model || 'default',
+            prompt: prompt,
+            n: 1,
+            size: '1024x1024',
+        }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error?.message || error.message || `请求失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // 尝试多种响应格式
+    const imageUrl = data.data?.[0]?.url
+        || data.images?.[0]?.url
+        || data.output?.[0]
+        || data.url
+        || data.image_url;
+
+    if (!imageUrl) {
+        throw new Error('无法从响应中获取图片 URL');
+    }
+
+    return {
+        url: imageUrl,
+        alt: prompt.slice(0, 100),
+    };
+}
+
 // 主生成函数
 export async function generateImage(
     prompt: string,
@@ -315,6 +459,18 @@ export async function generateImage(
             case 'baidu':
                 onProgress?.('使用文心一格生成中...');
                 result = await generateWithBaidu(prompt, config);
+                break;
+            case 'siliconflow':
+                onProgress?.('使用 SiliconFlow 生成中...');
+                result = await generateWithSiliconFlow(prompt, config);
+                break;
+            case 'replicate':
+                onProgress?.('使用 Replicate 生成中...');
+                result = await generateWithReplicate(prompt, config);
+                break;
+            case 'custom':
+                onProgress?.('使用自定义端点生成中...');
+                result = await generateWithCustom(prompt, config);
                 break;
             default:
                 throw new Error(`不支持的图片生成服务: ${config.provider}`);
@@ -377,4 +533,27 @@ export const IMAGE_PROVIDERS = [
         endpoint: 'https://aip.baidubce.com/rpc/2.0/ernievilg/v1/txt2imgv2',
         models: ['v2'],
     },
+    {
+        value: 'siliconflow',
+        label: 'SiliconFlow 硅基流动',
+        description: '国内高性价比图片生成，支持多种模型',
+        endpoint: 'https://api.siliconflow.cn/v1/images/generations',
+        models: ['stabilityai/stable-diffusion-3-5-large', 'black-forest-labs/FLUX.1-schnell', 'stabilityai/stable-diffusion-xl-base-1.0'],
+    },
+    {
+        value: 'replicate',
+        label: 'Replicate',
+        description: '云端模型平台，支持多种开源模型',
+        endpoint: 'https://api.replicate.com/v1/predictions',
+        models: ['stability-ai/stable-diffusion-3', 'black-forest-labs/flux-schnell'],
+    },
+    {
+        value: 'custom',
+        label: '自定义端点',
+        description: '使用自定义 API 端点 (OpenAI 兼容格式)',
+        endpoint: '',
+        models: [],
+        requiresEndpoint: true,
+    },
 ];
+

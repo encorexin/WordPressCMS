@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/context/LocalAuthProvider";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -60,7 +59,6 @@ import {
 import { db } from "@/db/database";
 
 export default function DataManagement() {
-    const { user } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [loading, setLoading] = useState(true);
     const [exporting, setExporting] = useState(false);

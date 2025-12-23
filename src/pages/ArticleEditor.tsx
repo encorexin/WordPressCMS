@@ -1,0 +1,529 @@
+import { useEffect, useState } from "react";
+import { useAuth } from "@/context/LocalAuthProvider";
+import { useNavigate, useParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import {
+  getArticle,
+  createArticle,
+  updateArticle,
+  updateArticleStatus,
+  getWordPressSites,
+} from "@/db/api";
+import { getEffectiveAISettings } from "@/db/aiSettings";
+import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
+import type { ArticleInput, WordPressSite } from "@/types/types";
+import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe } from "lucide-react";
+import { sendChatStream } from "@/utils/aiChat";
+import { publishToWordPress } from "@/utils/wordpress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Streamdown } from "streamdown";
+
+
+export default function ArticleEditor() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const isNew = id === "new";
+
+  const [sites, setSites] = useState<WordPressSite[]>([]);
+  const [templates, setTemplates] = useState<ArticleTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<ArticleTemplate | null>(null);
+  const [loading, setLoading] = useState(!isNew);
+  const [generating, setGenerating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [currentContent, setCurrentContent] = useState("");
+
+  const form = useForm<ArticleInput>({
+    defaultValues: {
+      title: "",
+      content: "",
+      keywords: "",
+      template: "",
+      site_id: "",
+    },
+  });
+
+  useEffect(() => {
+    loadSites();
+    loadTemplates();
+    if (!isNew && id) {
+      loadArticle(id);
+    }
+  }, [id, isNew, user]);
+
+  const loadTemplates = async () => {
+    if (!user?.id) return;
+    try {
+      await initDefaultTemplates(user.id);
+      const data = await getTemplates(user.id);
+      setTemplates(data);
+      // 默认选择第一个模板
+      if (data.length > 0 && !selectedTemplate) {
+        setSelectedTemplate(data[0]);
+        form.setValue("template", data[0].name);
+      }
+    } catch (error) {
+      console.error("加载模板失败:", error);
+    }
+  };
+
+  const loadSites = async () => {
+    try {
+      const data = await getWordPressSites(user?.id);
+      setSites(data);
+    } catch (error) {
+      console.error("加载站点失败:", error);
+    }
+  };
+
+  const loadArticle = async (articleId: string) => {
+    try {
+      setLoading(true);
+      const article = await getArticle(articleId);
+      if (article) {
+        form.reset({
+          title: article.title,
+          content: article.content || "",
+          keywords: article.keywords || "",
+          template: article.template || "默认模板",
+          site_id: article.site_id || "",
+        });
+        setCurrentContent(article.content || "");
+      }
+    } catch (error) {
+      toast.error("加载文章失败");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async (data: ArticleInput) => {
+    try {
+      if (!user?.id) {
+        toast.error("用户未登录");
+        return;
+      }
+
+      if (isNew) {
+        await createArticle(user.id, data);
+        toast.success("文章创建成功");
+      } else if (id) {
+        await updateArticle(id, data);
+        toast.success("文章保存成功");
+      }
+      navigate("/articles");
+    } catch (error) {
+      toast.error("保存失败");
+      console.error(error);
+    }
+  };
+
+  const handleGenerate = async () => {
+    const keywords = form.getValues("keywords");
+    const template = form.getValues("template");
+
+    if (!keywords) {
+      toast.error("请输入关键词");
+      return;
+    }
+
+    if (!user?.id) {
+      toast.error("用户未登录");
+      return;
+    }
+
+    try {
+      setGenerating(true);
+      setCurrentContent("");
+
+      // 获取用户的 AI 设置
+      const aiSettings = await getEffectiveAISettings(user.id);
+
+      if (!aiSettings.api_key) {
+        toast.error("请先在 AI 设置中配置 API Key");
+        setGenerating(false);
+        return;
+      }
+
+      // 优先使用选中模板的提示词，否则使用 AI 设置中的默认提示词
+      const basePrompt = selectedTemplate?.system_prompt || aiSettings.system_prompt;
+
+      // 处理系统提示词中的占位符
+      const systemPrompt = basePrompt
+        .replace(/\{keywords\}/g, keywords)
+        .replace(/\{template\}/g, template || "默认模板");
+
+      // 用户消息：简洁的生成请求
+      const userMessage = `关键词：${keywords}\n模板风格：${template || "默认模板"}\n\n请直接输出文章内容：`;
+
+      await sendChatStream({
+        endpoint: aiSettings.api_endpoint,
+        apiKey: aiSettings.api_key,
+        model: aiSettings.model,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: userMessage,
+          },
+        ],
+        onUpdate: (content: string) => {
+          setCurrentContent(content);
+          form.setValue("content", content);
+        },
+        onComplete: () => {
+          toast.success("文章生成完成");
+          setGenerating(false);
+        },
+        onError: (error: Error) => {
+          toast.error("生成失败: " + error.message);
+          setGenerating(false);
+        },
+      });
+    } catch (error) {
+      toast.error("生成失败");
+      console.error(error);
+      setGenerating(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    const title = form.getValues("title");
+    const content = form.getValues("content");
+    const siteId = form.getValues("site_id");
+
+    if (!title || !content) {
+      toast.error("请填写标题和内容");
+      return;
+    }
+
+    if (!siteId) {
+      toast.error("请选择发布站点");
+      return;
+    }
+
+    const site = sites.find((s) => s.id === siteId);
+    if (!site) {
+      toast.error("站点不存在");
+      return;
+    }
+
+    try {
+      setPublishing(true);
+
+      // 先保存文章
+      if (!user?.id) {
+        toast.error("用户未登录");
+        return;
+      }
+
+      let articleId = id;
+      if (isNew) {
+        const article = await createArticle(user.id, {
+          title,
+          content,
+          keywords: form.getValues("keywords"),
+          template: form.getValues("template"),
+          site_id: siteId,
+        });
+        articleId = article.id;
+      } else if (id) {
+        await updateArticle(id, {
+          title,
+          content,
+          site_id: siteId,
+        });
+      }
+
+      // 发布到WordPress
+      const result = await publishToWordPress(site, title, content);
+
+      if (result.success && articleId) {
+        await updateArticleStatus(articleId, "published", result.postId);
+        toast.success("发布成功");
+        navigate("/articles");
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      toast.error("发布失败");
+      console.error(error);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20 dark:from-gray-950 dark:via-blue-950/20 dark:to-purple-950/10 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20 dark:from-gray-950 dark:via-blue-950/20 dark:to-purple-950/10">
+      <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl">
+        {/* 头部操作栏 */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/articles")}>
+              <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
+              返回
+            </Button>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
+              {isNew ? "创建文章" : "编辑文章"}
+            </h1>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={form.handleSubmit(handleSave)}
+              className="flex-1 sm:flex-none border-2 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              保存
+            </Button>
+            <Button
+              onClick={handlePublish}
+              disabled={publishing}
+              className="flex-1 sm:flex-none bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg"
+            >
+              {publishing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              发布
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
+          {/* 主编辑区域 */}
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+            <Card className="border-0 shadow-lg bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="text-lg sm:text-xl">文章内容</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="title"
+                      rules={{ required: "请输入文章标题" }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>标题</FormLabel>
+                          <FormControl>
+                            <Input placeholder="输入文章标题" {...field} className="text-base" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="content"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>内容</FormLabel>
+                          <FormControl>
+                            <Tabs defaultValue="edit" className="w-full">
+                              <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="edit">编辑</TabsTrigger>
+                                <TabsTrigger value="preview">预览</TabsTrigger>
+                              </TabsList>
+                              <TabsContent value="edit">
+                                <Textarea
+                                  placeholder="输入文章内容（支持Markdown格式）"
+                                  className="min-h-[300px] sm:min-h-[400px] font-mono text-sm sm:text-base"
+                                  {...field}
+                                  value={currentContent || field.value}
+                                  onChange={(e) => {
+                                    field.onChange(e);
+                                    setCurrentContent(e.target.value);
+                                  }}
+                                />
+                              </TabsContent>
+                              <TabsContent value="preview">
+                                <div className="min-h-[300px] sm:min-h-[400px] p-3 sm:p-4 border rounded-md prose prose-sm max-w-none dark:prose-invert overflow-auto">
+                                  <Streamdown>
+                                    {currentContent || field.value || "暂无内容"}
+                                  </Streamdown>
+                                </div>
+                              </TabsContent>
+                            </Tabs>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 侧边栏 */}
+          <div className="space-y-4 sm:space-y-6">
+            {/* AI生成 */}
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
+                  <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400" />
+                  <span>AI生成</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="keywords"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">关键词</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="输入关键词，用逗号分隔"
+                              {...field}
+                              className="text-sm"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="template"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">模板风格</FormLabel>
+                          <Select
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                              const template = templates.find(t => t.name === value);
+                              setSelectedTemplate(template || null);
+                            }}
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="text-sm">
+                                <SelectValue placeholder="选择模板风格" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {templates.map((template) => (
+                                <SelectItem key={template.id} value={template.name}>
+                                  {template.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedTemplate && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {selectedTemplate.description}
+                            </p>
+                          )}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
+                      onClick={handleGenerate}
+                      disabled={generating}
+                    >
+                      {generating ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="mr-2 h-4 w-4" />
+                          AI生成文章
+                        </>
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+
+            {/* 发布设置 */}
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
+                  <Globe className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+                  <span>发布设置</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="site_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">目标站点</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="text-sm">
+                                <SelectValue placeholder="选择WordPress站点" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {sites.map((site) => (
+                                <SelectItem key={site.id} value={site.id}>
+                                  {site.site_name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

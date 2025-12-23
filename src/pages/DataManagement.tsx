@@ -18,6 +18,14 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
     Download,
@@ -26,18 +34,30 @@ import {
     Loader2,
     FileJson,
     AlertTriangle,
-    CheckCircle,
     HardDrive,
+    FileText,
+    FileSpreadsheet,
+    ChevronDown,
+    Lightbulb,
+    Tags,
+    FileCode,
 } from "lucide-react";
 import {
     exportAllData,
     downloadExportFile,
+    exportTableData,
+    exportToCSV,
+    exportArticlesToMarkdown,
+    exportTopicsToText,
+    exportKeywordsToText,
     readImportFile,
     validateImportData,
     importData,
     getDataStats,
+    TABLE_NAMES,
     type ExportData,
 } from "@/db/dataExport";
+import { db } from "@/db/database";
 
 export default function DataManagement() {
     const { user } = useAuth();
@@ -74,6 +94,68 @@ export default function DataManagement() {
         } catch (error) {
             toast.error("导出失败");
             console.error(error);
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleExportTable = async (tableName: string, format: 'json' | 'csv') => {
+        try {
+            setExporting(true);
+            const data = await exportTableData(tableName);
+
+            if (format === 'csv') {
+                exportToCSV(data.data, tableName);
+            } else {
+                downloadExportFile(data);
+            }
+
+            toast.success(`${TABLE_NAMES[tableName] || tableName} 导出成功`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '导出失败';
+            toast.error(message);
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleExportArticlesMarkdown = async () => {
+        try {
+            setExporting(true);
+            const articles = await db.articles.toArray();
+            exportArticlesToMarkdown(articles);
+            toast.success("文章导出为 Markdown 成功");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '导出失败';
+            toast.error(message);
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleExportTopicsText = async () => {
+        try {
+            setExporting(true);
+            const topics = await db.topics.toArray();
+            exportTopicsToText(topics);
+            toast.success("主题导出成功");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '导出失败';
+            toast.error(message);
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleExportKeywordsText = async () => {
+        try {
+            setExporting(true);
+            const keywords = await db.keywords.toArray();
+            exportKeywordsToText(keywords);
+            toast.success("关键词导出成功");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '导出失败';
+            toast.error(message);
         } finally {
             setExporting(false);
         }
@@ -119,9 +201,11 @@ export default function DataManagement() {
             const result = await importData(pendingImportData, { clearExisting: true });
 
             if (result.success) {
-                toast.success(
-                    `导入成功: ${result.stats.users || 0} 用户, ${result.stats.articles || 0} 文章, ${result.stats.wordpress_sites || 0} 站点`
-                );
+                const items = Object.entries(result.stats)
+                    .filter(([_, count]) => count > 0)
+                    .map(([key, count]) => `${count} ${TABLE_NAMES[key] || key}`)
+                    .join(', ');
+                toast.success(`导入成功: ${items}`);
                 await loadStats();
             } else {
                 toast.error(result.message);
@@ -139,11 +223,13 @@ export default function DataManagement() {
         { key: "users", label: "用户", icon: Database },
         { key: "wordpress_sites", label: "站点", icon: HardDrive },
         { key: "articles", label: "文章", icon: FileJson },
-        { key: "ai_settings", label: "AI 设置", icon: Database },
+        { key: "article_templates", label: "模板", icon: FileCode },
+        { key: "keywords", label: "关键词", icon: Tags },
+        { key: "topics", label: "主题", icon: Lightbulb },
     ];
 
     return (
-        <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-2xl space-y-6">
+        <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-3xl space-y-6">
             {/* 数据统计 */}
             <Card className="border-0 shadow-lg">
                 <CardHeader className="pb-4">
@@ -163,16 +249,16 @@ export default function DataManagement() {
                             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6">
                             {statItems.map((item) => {
                                 const Icon = item.icon;
                                 return (
                                     <div
                                         key={item.key}
-                                        className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-center"
+                                        className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-center"
                                     >
-                                        <Icon className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-                                        <div className="text-2xl font-bold">{stats[item.key] || 0}</div>
+                                        <Icon className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
+                                        <div className="text-xl font-bold">{stats[item.key] || 0}</div>
                                         <div className="text-xs text-muted-foreground">{item.label}</div>
                                     </div>
                                 );
@@ -181,7 +267,7 @@ export default function DataManagement() {
                     )}
 
                     <div className="space-y-3">
-                        {/* 导出按钮 */}
+                        {/* 完整备份 */}
                         <Button
                             onClick={handleExport}
                             className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
@@ -196,10 +282,117 @@ export default function DataManagement() {
                             ) : (
                                 <>
                                     <Download className="mr-2 h-4 w-4" />
-                                    导出数据备份
+                                    导出完整备份 (JSON)
                                 </>
                             )}
                         </Button>
+
+                        {/* 分类导出 */}
+                        <div className="grid grid-cols-2 gap-3">
+                            {/* 文章导出 */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full" disabled={exporting}>
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        导出文章
+                                        <ChevronDown className="ml-auto h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuLabel>选择格式</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => handleExportTable('articles', 'json')}>
+                                        <FileJson className="mr-2 h-4 w-4" />
+                                        JSON 格式
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExportTable('articles', 'csv')}>
+                                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                        CSV 格式
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={handleExportArticlesMarkdown}>
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Markdown 格式
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            {/* 主题导出 */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full" disabled={exporting}>
+                                        <Lightbulb className="mr-2 h-4 w-4" />
+                                        导出主题
+                                        <ChevronDown className="ml-auto h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuLabel>选择格式</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => handleExportTable('topics', 'json')}>
+                                        <FileJson className="mr-2 h-4 w-4" />
+                                        JSON 格式
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExportTable('topics', 'csv')}>
+                                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                        CSV 格式
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={handleExportTopicsText}>
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        文本格式
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            {/* 关键词导出 */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full" disabled={exporting}>
+                                        <Tags className="mr-2 h-4 w-4" />
+                                        导出关键词
+                                        <ChevronDown className="ml-auto h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuLabel>选择格式</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => handleExportTable('keywords', 'json')}>
+                                        <FileJson className="mr-2 h-4 w-4" />
+                                        JSON 格式
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExportTable('keywords', 'csv')}>
+                                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                        CSV 格式
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={handleExportKeywordsText}>
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        文本格式
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            {/* 模板导出 */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full" disabled={exporting}>
+                                        <FileCode className="mr-2 h-4 w-4" />
+                                        导出模板
+                                        <ChevronDown className="ml-auto h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuLabel>选择格式</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => handleExportTable('article_templates', 'json')}>
+                                        <FileJson className="mr-2 h-4 w-4" />
+                                        JSON 格式
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExportTable('article_templates', 'csv')}>
+                                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                        CSV 格式
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
 
                         {/* 导入按钮 */}
                         <Button
@@ -242,6 +435,7 @@ export default function DataManagement() {
                         <ul className="list-disc list-inside text-amber-600 dark:text-amber-400 space-y-1">
                             <li>导入数据会覆盖现有所有数据</li>
                             <li>建议在导入前先导出当前数据作为备份</li>
+                            <li>支持导出为 JSON、CSV、Markdown、文本等格式</li>
                             <li>定期导出数据可防止意外丢失</li>
                         </ul>
                     </div>
@@ -263,7 +457,10 @@ export default function DataManagement() {
                                     <p className="mt-2">
                                         包含：{pendingImportData.data.users?.length || 0} 用户,{" "}
                                         {pendingImportData.data.articles?.length || 0} 文章,{" "}
-                                        {pendingImportData.data.wordpress_sites?.length || 0} 站点
+                                        {pendingImportData.data.wordpress_sites?.length || 0} 站点,{" "}
+                                        {pendingImportData.data.article_templates?.length || 0} 模板,{" "}
+                                        {pendingImportData.data.keywords?.length || 0} 关键词,{" "}
+                                        {pendingImportData.data.topics?.length || 0} 主题
                                     </p>
                                 </div>
                             )}

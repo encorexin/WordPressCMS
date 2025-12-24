@@ -35,7 +35,7 @@ import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService"
 import type { ArticleInput, WordPressSite } from "@/types/types";
 import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb, ImagePlus } from "lucide-react";
 import { sendChatStream } from "@/utils/aiChat";
-import { publishToWordPress } from "@/utils/wordpress";
+import { publishToWordPress, updateWordPressPost } from "@/utils/wordpress";
 import { generateImage, insertImageToContent, generateImagePrompt, IMAGE_PROVIDERS, type ImageGenerationConfig } from "@/utils/imageGeneration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -66,6 +66,7 @@ export default function ArticleEditor() {
   const [imageEndpoint, setImageEndpoint] = useState("");
   const [imageModel, setImageModel] = useState("");
   const [imageStatus, setImageStatus] = useState("");
+  const [wpPostId, setWpPostId] = useState<string | null>(null);
 
   const form = useForm<ArticleInput>({
     defaultValues: {
@@ -202,6 +203,10 @@ export default function ArticleEditor() {
           site_id: article.site_id || "",
         });
         setCurrentContent(article.content || "");
+        // 加载WordPress文章ID用于后续更新
+        if (article.wordpress_post_id) {
+          setWpPostId(article.wordpress_post_id);
+        }
       }
     } catch (error) {
       toast.error("加载文章失败");
@@ -358,15 +363,29 @@ export default function ArticleEditor() {
         });
       }
 
-      // 发布到WordPress
-      const result = await publishToWordPress(site, title, content);
-
-      if (result.success && articleId) {
-        await updateArticleStatus(articleId, "published", result.postId);
-        toast.success("发布成功");
-        navigate("/articles");
+      // 发布到WordPress - 检查是否需要更新现有文章
+      let result;
+      if (wpPostId) {
+        // 已有WordPress文章ID，更新现有文章
+        result = await updateWordPressPost(site, wpPostId, title, content);
+        if (result.success && articleId) {
+          await updateArticleStatus(articleId, "published");
+          toast.success("更新发布成功");
+          navigate("/articles");
+        } else {
+          toast.error(result.message);
+        }
       } else {
-        toast.error(result.message);
+        // 新发布
+        result = await publishToWordPress(site, title, content);
+        if (result.success && articleId) {
+          await updateArticleStatus(articleId, "published", result.postId);
+          setWpPostId(result.postId || null);
+          toast.success("发布成功");
+          navigate("/articles");
+        } else {
+          toast.error(result.message);
+        }
       }
     } catch (error) {
       toast.error("发布失败");

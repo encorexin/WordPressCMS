@@ -424,7 +424,7 @@ export default function ArticleEditor() {
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
           {/* 主编辑区域 */}
-          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
             <Card className="border-0 shadow-lg bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-lg sm:text-xl">文章内容</CardTitle>
@@ -471,7 +471,7 @@ export default function ArticleEditor() {
                                 />
                               </TabsContent>
                               <TabsContent value="preview">
-                                <div className="min-h-[300px] sm:min-h-[400px] p-3 sm:p-4 border rounded-md prose prose-sm max-w-none dark:prose-invert overflow-auto">
+                                <div className="min-h-[300px] sm:min-h-[400px] p-3 sm:p-4 border rounded-md prose prose-sm max-w-none dark:prose-invert overflow-x-auto overflow-y-auto break-words [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_pre_code]:break-normal [&_table]:block [&_table]:overflow-x-auto">
                                   <Streamdown>
                                     {currentContent || field.value || "暂无内容"}
                                   </Streamdown>

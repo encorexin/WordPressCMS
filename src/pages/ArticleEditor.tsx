@@ -33,7 +33,7 @@ import { getEffectiveAISettings, getImageSettings } from "@/db/aiSettings";
 import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
 import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
 import type { ArticleInput, WordPressSite } from "@/types/types";
-import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb, ImagePlus } from "lucide-react";
+import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb, ImagePlus, Download } from "lucide-react";
 import { sendChatStream } from "@/utils/aiChat";
 import { publishToWordPress, updateWordPressPost } from "@/utils/wordpress";
 import { generateImage, insertImageToContent, generateImagePrompt, IMAGE_PROVIDERS, type ImageGenerationConfig } from "@/utils/imageGeneration";
@@ -41,6 +41,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Streamdown } from "streamdown";
+import { downloadSingleArticle } from "@/db/dataExport";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 
 export default function ArticleEditor() {
@@ -455,6 +462,54 @@ export default function ArticleEditor() {
               )}
               发布
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="border-2">
+                  <Download className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => {
+                  const article = {
+                    title: form.getValues("title") || "无标题",
+                    content: form.getValues("content") || "",
+                    keywords: form.getValues("keywords"),
+                    template: form.getValues("template"),
+                    status: "draft",
+                  };
+                  downloadSingleArticle(article, 'markdown');
+                  toast.success("文章已下载为 Markdown 格式");
+                }}>
+                  下载 Markdown (.md)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  const article = {
+                    title: form.getValues("title") || "无标题",
+                    content: form.getValues("content") || "",
+                    keywords: form.getValues("keywords"),
+                    template: form.getValues("template"),
+                    status: "draft",
+                  };
+                  downloadSingleArticle(article, 'txt');
+                  toast.success("文章已下载为文本格式");
+                }}>
+                  下载文本 (.txt)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  const article = {
+                    title: form.getValues("title") || "无标题",
+                    content: form.getValues("content") || "",
+                    keywords: form.getValues("keywords"),
+                    template: form.getValues("template"),
+                    status: "draft",
+                  };
+                  downloadSingleArticle(article, 'html');
+                  toast.success("文章已下载为 HTML 格式");
+                }}>
+                  下载网页 (.html)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

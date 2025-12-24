@@ -40,6 +40,7 @@ import {
     Lightbulb,
     Tags,
     FileCode,
+    Settings,
 } from "lucide-react";
 import {
     exportAllData,
@@ -49,6 +50,8 @@ import {
     exportArticlesToMarkdown,
     exportTopicsToText,
     exportKeywordsToText,
+    exportAISettingsToJSON,
+    exportAISettingsFull,
     readImportFile,
     validateImportData,
     importData,
@@ -387,6 +390,49 @@ export default function DataManagement() {
                                     <DropdownMenuItem onClick={() => handleExportTable('article_templates', 'csv')}>
                                         <FileSpreadsheet className="mr-2 h-4 w-4" />
                                         CSV 格式
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            {/* AI设置导出 */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full" disabled={exporting}>
+                                        <Settings className="mr-2 h-4 w-4" />
+                                        导出 AI 设置
+                                        <ChevronDown className="ml-auto h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuLabel>选择格式</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={async () => {
+                                        try {
+                                            setExporting(true);
+                                            await exportAISettingsToJSON();
+                                            toast.success("AI 设置已导出（API Key 已隐藏）");
+                                        } catch (error) {
+                                            toast.error("导出失败");
+                                        } finally {
+                                            setExporting(false);
+                                        }
+                                    }}>
+                                        <FileJson className="mr-2 h-4 w-4" />
+                                        安全导出（隐藏 Key）
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={async () => {
+                                        try {
+                                            setExporting(true);
+                                            await exportAISettingsFull();
+                                            toast.success("AI 设置已完整导出（含 API Key）");
+                                        } catch (error) {
+                                            toast.error("导出失败");
+                                        } finally {
+                                            setExporting(false);
+                                        }
+                                    }}>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        完整导出（含 API Key）
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>

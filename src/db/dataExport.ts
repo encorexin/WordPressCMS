@@ -239,6 +239,150 @@ export function exportKeywordsToText(keywords: any[]): void {
     URL.revokeObjectURL(url);
 }
 
+// 下载单篇文章
+export function downloadSingleArticle(
+    article: { title: string; content: string; keywords?: string; template?: string; status?: string; created_at?: string },
+    format: 'markdown' | 'txt' | 'html' = 'markdown'
+): void {
+    let content: string;
+    let mimeType: string;
+    let extension: string;
+
+    const safeTitle = (article.title || '无标题').replace(/[<>:"/\\|?*]/g, '_');
+
+    switch (format) {
+        case 'markdown':
+            content = `# ${article.title || '无标题'}
+
+**关键词:** ${article.keywords || '无'}
+**模板:** ${article.template || '默认'}
+**状态:** ${article.status || '草稿'}
+**创建时间:** ${article.created_at || '未知'}
+
+---
+
+${article.content || ''}
+`;
+            mimeType = 'text/markdown;charset=utf-8';
+            extension = 'md';
+            break;
+
+        case 'txt':
+            content = `${article.title || '无标题'}
+========================================
+
+关键词: ${article.keywords || '无'}
+模板: ${article.template || '默认'}
+状态: ${article.status || '草稿'}
+创建时间: ${article.created_at || '未知'}
+
+----------------------------------------
+
+${article.content || ''}
+`;
+            mimeType = 'text/plain;charset=utf-8';
+            extension = 'txt';
+            break;
+
+        case 'html':
+            content = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${article.title || '无标题'}</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .meta { color: #666; font-size: 0.9em; margin-bottom: 20px; }
+        .content { white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>${article.title || '无标题'}</h1>
+    <div class="meta">
+        <p>关键词: ${article.keywords || '无'} | 模板: ${article.template || '默认'} | 状态: ${article.status || '草稿'}</p>
+        <p>创建时间: ${article.created_at || '未知'}</p>
+    </div>
+    <hr>
+    <div class="content">${article.content || ''}</div>
+</body>
+</html>`;
+            mimeType = 'text/html;charset=utf-8';
+            extension = 'html';
+            break;
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeTitle}.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// 导出 AI 设置（包含生图 API 配置）
+export async function exportAISettingsToJSON(): Promise<void> {
+    const ai_settings = await db.ai_settings.toArray();
+
+    // 过滤敏感信息，只保留部分 API key 用于参考
+    const safeSettings = ai_settings.map(setting => ({
+        ...setting,
+        api_key: setting.api_key ? `${setting.api_key.slice(0, 8)}...` : '',
+        image_api_key: setting.image_api_key ? `${setting.image_api_key.slice(0, 8)}...` : '',
+    }));
+
+    const exportData = {
+        type: 'ai_settings',
+        exportedAt: new Date().toISOString(),
+        count: safeSettings.length,
+        note: 'API Key 已部分隐藏，导入后需要重新输入完整的 API Key',
+        data: safeSettings,
+    };
+
+    const json = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ai-settings-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// 导出 AI 设置为可导入格式（完整 API Key - 谨慎使用）
+export async function exportAISettingsFull(): Promise<void> {
+    const ai_settings = await db.ai_settings.toArray();
+
+    const exportData = {
+        type: 'ai_settings_full',
+        version: '2.0.0',
+        exportedAt: new Date().toISOString(),
+        count: ai_settings.length,
+        warning: '此导出包含完整的 API Key，请妥善保管！',
+        data: ai_settings,
+    };
+
+    const json = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ai-settings-full-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 // 验证导入数据格式
 export function validateImportData(data: any): { valid: boolean; error?: string } {
     if (!data || typeof data !== 'object') {

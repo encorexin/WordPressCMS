@@ -33,8 +33,9 @@ export async function saveAISettings(
         api_key: string;
         model: string;
         system_prompt: string;
-        image_provider?: 'openai' | 'aliyun' | 'zhipu' | 'stability' | 'baidu' | '';
+        image_provider?: 'openai' | 'aliyun' | 'zhipu' | 'stability' | 'baidu' | 'siliconflow' | 'replicate' | 'custom' | '';
         image_api_key?: string;
+        image_endpoint?: string;
         image_model?: string;
         image_enabled?: boolean;
     }
@@ -84,6 +85,7 @@ export async function getImageSettings(userId: string): Promise<{
     enabled: boolean;
     provider: string;
     apiKey: string;
+    endpoint: string;
     model: string;
 } | null> {
     const settings = await getAISettings(userId);
@@ -92,6 +94,7 @@ export async function getImageSettings(userId: string): Promise<{
             enabled: true,
             provider: settings.image_provider || 'openai',
             apiKey: settings.image_api_key,
+            endpoint: settings.image_endpoint || '',
             model: settings.image_model || '',
         };
     }

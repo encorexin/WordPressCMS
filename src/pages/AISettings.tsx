@@ -19,8 +19,11 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Settings, Zap, Save, CheckCircle, RotateCcw } from "lucide-react";
+import { Loader2, Settings, Zap, Save, CheckCircle, RotateCcw, ImageIcon } from "lucide-react";
 import { getAISettings, saveAISettings, testAIConnection, getDefaultSystemPrompt } from "@/db/aiSettings";
+import type { AISettings } from "@/db/database";
+import { IMAGE_PROVIDERS } from "@/utils/imageGeneration";
+import { Switch } from "@/components/ui/switch";
 
 const PRESET_MODELS = [
     // OpenAI
@@ -75,6 +78,13 @@ export default function AISettingsPage() {
     const [useCustomEndpoint, setUseCustomEndpoint] = useState(false);
     const [useCustomModel, setUseCustomModel] = useState(false);
 
+    // 图片生成设置
+    const [imageEnabled, setImageEnabled] = useState(false);
+    const [imageProvider, setImageProvider] = useState("siliconflow");
+    const [imageApiKey, setImageApiKey] = useState("");
+    const [imageEndpoint, setImageEndpoint] = useState("");
+    const [imageModel, setImageModel] = useState("");
+
     useEffect(() => {
         loadSettings();
     }, [user]);
@@ -110,6 +120,23 @@ export default function AISettingsPage() {
 
                 setApiKey(settings.api_key);
                 setSystemPrompt(settings.system_prompt || getDefaultSystemPrompt());
+
+                // 加载图片生成设置
+                if (settings.image_enabled !== undefined) {
+                    setImageEnabled(settings.image_enabled);
+                }
+                if (settings.image_provider) {
+                    setImageProvider(settings.image_provider);
+                }
+                if (settings.image_api_key) {
+                    setImageApiKey(settings.image_api_key);
+                }
+                if (settings.image_endpoint) {
+                    setImageEndpoint(settings.image_endpoint);
+                }
+                if (settings.image_model) {
+                    setImageModel(settings.image_model);
+                }
             }
         } catch (error) {
             console.error("加载设置失败:", error);
@@ -144,6 +171,12 @@ export default function AISettingsPage() {
                 api_key: apiKey,
                 model: finalModel,
                 system_prompt: systemPrompt,
+                // 图片生成设置
+                image_enabled: imageEnabled,
+                image_provider: imageProvider as AISettings['image_provider'],
+                image_api_key: imageApiKey,
+                image_endpoint: imageEndpoint,
+                image_model: imageModel,
             });
             toast.success("设置保存成功");
         } catch (error) {
@@ -355,6 +388,86 @@ export default function AISettingsPage() {
                         系统提示词会作为 AI 的角色设定，影响生成内容的风格和格式。使用 {"{keywords}"} 和 {"{template}"} 作为占位符。
                     </p>
                 </CardContent>
+            </Card>
+
+            {/* 图片生成设置 */}
+            <Card className="border-0 shadow-lg bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm">
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                            <div className="p-2 bg-gradient-to-br from-green-500 to-teal-600 rounded-lg">
+                                <ImageIcon className="h-5 w-5 text-white" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-lg">图片生成设置</CardTitle>
+                                <CardDescription>配置 AI 图片生成服务</CardDescription>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Label htmlFor="image-enabled">启用</Label>
+                            <Switch
+                                id="image-enabled"
+                                checked={imageEnabled}
+                                onCheckedChange={setImageEnabled}
+                            />
+                        </div>
+                    </div>
+                </CardHeader>
+                {imageEnabled && (
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>图片生成服务</Label>
+                            <Select value={imageProvider} onValueChange={setImageProvider}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {IMAGE_PROVIDERS.map((provider) => (
+                                        <SelectItem key={provider.value} value={provider.value}>
+                                            {provider.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.description}
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>图片 API Key</Label>
+                            <Input
+                                type="password"
+                                placeholder="输入图片生成服务的 API Key"
+                                value={imageApiKey}
+                                onChange={(e) => setImageApiKey(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>API 端点 {imageProvider === 'custom' ? '(必填)' : '(可选)'}</Label>
+                            <Input
+                                placeholder={IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.endpoint || "输入自定义 API 端点"}
+                                value={imageEndpoint}
+                                onChange={(e) => setImageEndpoint(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>模型 (可选)</Label>
+                            <Input
+                                placeholder={IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.[0] || "使用默认模型"}
+                                value={imageModel}
+                                onChange={(e) => setImageModel(e.target.value)}
+                            />
+                            {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.length ? (
+                                <p className="text-xs text-muted-foreground">
+                                    可用模型: {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.join(', ')}
+                                </p>
+                            ) : null}
+                        </div>
+                    </CardContent>
+                )}
             </Card>
 
             {/* 保存按钮 */}

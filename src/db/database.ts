@@ -46,8 +46,9 @@ export interface AISettings {
     model: string;
     system_prompt: string;
     // 图片生成设置
-    image_provider?: 'openai' | 'aliyun' | 'zhipu' | 'stability' | 'baidu' | '';
+    image_provider?: 'openai' | 'aliyun' | 'zhipu' | 'stability' | 'baidu' | 'siliconflow' | 'replicate' | 'custom' | '';
     image_api_key?: string;
+    image_endpoint?: string;
     image_model?: string;
     image_enabled?: boolean;
     created_at: string;

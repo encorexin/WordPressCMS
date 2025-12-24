@@ -29,7 +29,7 @@ import {
   updateArticleStatus,
   getWordPressSites,
 } from "@/db/api";
-import { getEffectiveAISettings } from "@/db/aiSettings";
+import { getEffectiveAISettings, getImageSettings } from "@/db/aiSettings";
 import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
 import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
 import type { ArticleInput, WordPressSite } from "@/types/types";
@@ -82,6 +82,7 @@ export default function ArticleEditor() {
     loadSites();
     loadTemplates();
     loadTopics();
+    loadImageSettings();
     if (!isNew && id) {
       loadArticle(id);
     }
@@ -132,6 +133,22 @@ export default function ArticleEditor() {
       setSites(data);
     } catch (error) {
       console.error("加载站点失败:", error);
+    }
+  };
+
+  // 加载保存的图片生成设置
+  const loadImageSettings = async () => {
+    if (!user?.id) return;
+    try {
+      const settings = await getImageSettings(user.id);
+      if (settings && settings.enabled) {
+        setImageProvider(settings.provider);
+        setImageApiKey(settings.apiKey);
+        setImageEndpoint(settings.endpoint);
+        setImageModel(settings.model);
+      }
+    } catch (error) {
+      console.error("加载图片设置失败:", error);
     }
   };
 

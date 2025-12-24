@@ -104,3 +104,42 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Prose 代码块样式 - 防止长代码溢出 */
+@layer components {
+  .prose pre {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .prose code {
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+
+  .prose pre code {
+    white-space: pre;
+    word-break: normal;
+  }
+
+  /* 表格溢出处理 */
+  .prose table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  /* 图片最大宽度 */
+  .prose img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* 长文本换行 */
+  .prose p,
+  .prose li {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+}
+

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/LocalAuthProvider";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { getStatistics } from "@/db/api";
 import { FileText, Globe, CheckCircle, FileEdit, Plus, ArrowRight, Sparkles } from "lucide-react";
 

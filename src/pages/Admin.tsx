@@ -126,8 +126,8 @@ export default function Admin() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="min-w-[100px]">用户ID</TableHead>
-                      <TableHead className="min-w-[120px]">手机号</TableHead>
-                      <TableHead className="min-w-[150px] hidden sm:table-cell">邮箱</TableHead>
+                      <TableHead className="min-w-[120px]">邮箱</TableHead>
+                      <TableHead className="min-w-[150px] hidden sm:table-cell">用户 ID</TableHead>
                       <TableHead className="min-w-[80px]">角色</TableHead>
                       <TableHead className="min-w-[150px] hidden md:table-cell">注册时间</TableHead>
                       <TableHead className="min-w-[120px]">操作</TableHead>
@@ -139,8 +139,8 @@ export default function Admin() {
                         <TableCell className="font-mono text-xs">
                           {profile.id.substring(0, 8)}...
                         </TableCell>
-                        <TableCell className="text-sm">{profile.phone || "-"}</TableCell>
-                        <TableCell className="text-sm hidden sm:table-cell">{profile.email || "-"}</TableCell>
+                        <TableCell className="text-sm">{profile.email || "-"}</TableCell>
+                        <TableCell className="text-sm hidden sm:table-cell">-</TableCell>
                         <TableCell>
                           <Badge
                             variant={

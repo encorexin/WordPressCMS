@@ -35,7 +35,7 @@ import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService"
 import type { ArticleInput, WordPressSite } from "@/types/types";
 import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb, ImagePlus, Download } from "lucide-react";
 import { sendChatStream } from "@/utils/aiChat";
-import { publishToWordPress, updateWordPressPost } from "@/utils/wordpress";
+import { publishToWordPress, updateWordPressPost, getWordPressCategories, type WordPressCategory } from "@/utils/wordpress";
 import { generateImage, insertImageToContent, generateImagePrompt, IMAGE_PROVIDERS, type ImageGenerationConfig } from "@/utils/imageGeneration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -74,6 +74,9 @@ export default function ArticleEditor() {
   const [imageModel, setImageModel] = useState("");
   const [imageStatus, setImageStatus] = useState("");
   const [wpPostId, setWpPostId] = useState<string | null>(null);
+  const [wpCategories, setWpCategories] = useState<WordPressCategory[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+  const [postSlug, setPostSlug] = useState("");
 
   const form = useForm<ArticleInput>({
     defaultValues: {
@@ -140,6 +143,25 @@ export default function ArticleEditor() {
       setSites(data);
     } catch (error) {
       console.error("加载站点失败:", error);
+    }
+  };
+
+  // 加载 WordPress 分类
+  const loadCategories = async (siteId: string) => {
+    const site = sites.find(s => s.id === siteId);
+    if (!site) return;
+
+    try {
+      const result = await getWordPressCategories(site);
+      if (result.success) {
+        setWpCategories(result.categories);
+      } else {
+        console.error("加载分类失败:", result.message);
+        setWpCategories([]);
+      }
+    } catch (error) {
+      console.error("加载分类失败:", error);
+      setWpCategories([]);
     }
   };
 
@@ -388,10 +410,15 @@ export default function ArticleEditor() {
       }
 
       // 发布到WordPress - 检查是否需要更新现有文章
+      const publishOptions = {
+        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+        slug: postSlug || undefined,
+      };
+
       let result;
       if (wpPostId) {
         // 已有WordPress文章ID，更新现有文章
-        result = await updateWordPressPost(site, wpPostId, title, content);
+        result = await updateWordPressPost(site, wpPostId, title, content, publishOptions);
         if (result.success && articleId) {
           await updateArticleStatus(articleId, "published");
           toast.success("更新发布成功");
@@ -401,7 +428,7 @@ export default function ArticleEditor() {
         }
       } else {
         // 新发布
-        result = await publishToWordPress(site, title, content);
+        result = await publishToWordPress(site, title, content, publishOptions);
         if (result.success && articleId) {
           await updateArticleStatus(articleId, "published", result.postId);
           setWpPostId(result.postId || null);
@@ -731,7 +758,11 @@ export default function ArticleEditor() {
                         <FormItem>
                           <FormLabel className="text-sm">目标站点</FormLabel>
                           <Select
-                            onValueChange={field.onChange}
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                              loadCategories(value);
+                              setSelectedCategories([]);
+                            }}
                             value={field.value}
                           >
                             <FormControl>
@@ -751,6 +782,55 @@ export default function ArticleEditor() {
                         </FormItem>
                       )}
                     />
+
+                    {/* 文章别名 */}
+                    <div className="space-y-2">
+                      <Label className="text-sm">文章别名 (Slug)</Label>
+                      <Input
+                        placeholder="留空自动生成，如: my-article-title"
+                        value={postSlug}
+                        onChange={(e) => setPostSlug(e.target.value)}
+                        className="text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        用于生成 SEO 友好的 URL
+                      </p>
+                    </div>
+
+                    {/* 文章分类 */}
+                    {wpCategories.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm">文章分类</Label>
+                        <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2 bg-white/50 dark:bg-gray-900/50">
+                          {wpCategories.map((cat) => (
+                            <label
+                              key={cat.id}
+                              className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 p-1 rounded text-sm"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedCategories.includes(cat.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedCategories([...selectedCategories, cat.id]);
+                                  } else {
+                                    setSelectedCategories(selectedCategories.filter(id => id !== cat.id));
+                                  }
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{cat.name}</span>
+                              <span className="text-xs text-muted-foreground">({cat.count})</span>
+                            </label>
+                          ))}
+                        </div>
+                        {selectedCategories.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            已选择 {selectedCategories.length} 个分类
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </form>
                 </Form>
               </CardContent>

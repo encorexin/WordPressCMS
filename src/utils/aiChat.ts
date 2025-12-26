@@ -216,11 +216,9 @@ export async function generateSEOSlug(
 3. 只包含英文字母、数字和短横线
 4. 简洁明了，长度控制在3-8个单词
 5. 移除无意义的词（如 the, a, an 等）
-6. 直接输出结果，不要解释
+6. 直接输出slug结果，不要任何解释或其他文字
 
-标题：${title}
-
-slug：`;
+标题：${title}`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -230,33 +228,53 @@ slug：`;
     headers["Authorization"] = `Bearer ${options.apiKey}`;
   }
 
+  // 确保端点格式正确
+  let endpoint = options.endpoint;
+  if (!endpoint.includes('/chat/completions') && !endpoint.includes('/v1/')) {
+    endpoint = endpoint.replace(/\/$/, '') + '/chat/completions';
+  }
+
   const body = {
     messages: [{ role: "user", content: prompt }],
     model: options.model || "gpt-3.5-turbo",
-    max_tokens: 100,
+    max_tokens: 50,
     temperature: 0.3,
+    stream: false,
   };
 
-  const response = await fetch(options.endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    throw new Error("生成失败");
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI Slug 生成失败:", response.status, errorText);
+      throw new Error(`API 请求失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+    let slug = data.choices?.[0]?.message?.content?.trim() || "";
+
+    // 移除可能的引号和多余字符
+    slug = slug.replace(/^["'`]|["'`]$/g, '');
+    slug = slug.replace(/^slug[：:]\s*/i, '');
+
+    // 清理结果
+    slug = slug
+      .toLowerCase()
+      .replace(/[^a-z0-9-\s]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .substring(0, 60); // 限制长度
+
+    return slug;
+  } catch (error) {
+    console.error("生成 SEO Slug 失败:", error);
+    throw error;
   }
-
-  const data = await response.json();
-  let slug = data.choices?.[0]?.message?.content?.trim() || "";
-
-  // 清理结果
-  slug = slug
-    .toLowerCase()
-    .replace(/[^a-z0-9-\s]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  return slug;
 }
+

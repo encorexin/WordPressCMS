@@ -234,15 +234,20 @@ export async function generateSEOSlug(
     endpoint = endpoint.replace(/\/$/, '') + '/chat/completions';
   }
 
-  const body = {
+  // 检查是否是推理模型（如 deepseek-reasoner）
+  const isReasonerModel = options.model?.includes('reasoner') || options.model?.includes('r1');
+
+  const body: Record<string, unknown> = {
     messages: [{ role: "user", content: prompt }],
     model: options.model || "gpt-3.5-turbo",
-    max_tokens: 50,
+    max_tokens: isReasonerModel ? 1000 : 100, // 推理模型需要更多 tokens
     temperature: 0.3,
     stream: false,
   };
 
   try {
+    console.log("SEO Slug API 请求:", { endpoint, body });
+
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
@@ -256,11 +261,56 @@ export async function generateSEOSlug(
     }
 
     const data = await response.json();
-    let slug = data.choices?.[0]?.message?.content?.trim() || "";
+    console.log("API 原始响应:", JSON.stringify(data, null, 2));
+
+    // 尝试多种方式提取内容
+    let slug = "";
+
+    // OpenAI 格式
+    if (data.choices?.[0]?.message?.content) {
+      slug = data.choices[0].message.content.trim();
+    }
+    // DeepSeek Reasoner 格式 - 内容可能在 reasoning_content 中，或者需要从中提取
+    else if (data.choices?.[0]?.message?.reasoning_content) {
+      // 从推理内容中尝试提取 slug（通常在最后）
+      const reasoning = data.choices[0].message.reasoning_content;
+      // 尝试找到最后生成的 slug 格式内容
+      const slugMatch = reasoning.match(/[a-z][a-z0-9-]*[a-z0-9]/gi);
+      if (slugMatch && slugMatch.length > 0) {
+        // 取最后一个匹配的、看起来像 slug 的内容
+        slug = slugMatch[slugMatch.length - 1];
+      }
+    }
+    // 其他可能的格式
+    else if (data.choices?.[0]?.text) {
+      slug = data.choices[0].text.trim();
+    }
+    else if (data.result) {
+      slug = data.result.trim();
+    }
+    else if (data.response) {
+      slug = data.response.trim();
+    }
+    else if (data.output) {
+      slug = data.output.trim();
+    }
+    else if (typeof data === 'string') {
+      slug = data.trim();
+    }
+
+    console.log("提取的原始内容:", slug);
+
+    // 如果仍然为空，尝试基于标题自动生成一个简单的 slug
+    if (!slug) {
+      console.log("API 未返回有效内容，使用本地生成");
+      // 使用 pinyin 或简单的中文到英文映射是理想的，这里先用简单处理
+      slug = "article-" + Date.now().toString(36);
+    }
 
     // 移除可能的引号和多余字符
     slug = slug.replace(/^["'`]|["'`]$/g, '');
     slug = slug.replace(/^slug[：:]\s*/i, '');
+    slug = slug.replace(/\n.*/g, ''); // 只取第一行
 
     // 清理结果
     slug = slug
@@ -270,6 +320,8 @@ export async function generateSEOSlug(
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "")
       .substring(0, 60); // 限制长度
+
+    console.log("最终处理后:", slug);
 
     return slug;
   } catch (error) {

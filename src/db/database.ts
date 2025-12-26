@@ -51,6 +51,9 @@ export interface AISettings {
     image_endpoint?: string;
     image_model?: string;
     image_enabled?: boolean;
+    // Slug 生成设置
+    slug_model?: string;
+    slug_enabled?: boolean;
     created_at: string;
     updated_at: string;
 }

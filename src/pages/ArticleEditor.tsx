@@ -29,7 +29,7 @@ import {
   updateArticleStatus,
   getWordPressSites,
 } from "@/db/api";
-import { getEffectiveAISettings, getImageSettings } from "@/db/aiSettings";
+import { getEffectiveAISettings, getImageSettings, getSlugSettings } from "@/db/aiSettings";
 import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
 import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
 import type { ArticleInput, WordPressSite } from "@/types/types";
@@ -185,37 +185,62 @@ export default function ArticleEditor() {
   // 使用 AI 生成 SEO 友好的文章别名
   const handleGenerateSlug = async () => {
     const title = form.getValues("title");
+    console.log("开始生成 Slug, 标题:", title);
+
     if (!title) {
       toast.error("请先输入文章标题");
       return;
     }
 
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.log("用户未登录");
+      toast.error("请先登录");
+      return;
+    }
 
     try {
       setGeneratingSlug(true);
+      console.log("获取 AI 设置...");
       const settings = await getEffectiveAISettings(user.id);
+      const slugSettings = await getSlugSettings(user.id);
+
+      // 如果 slug 功能被禁用
+      if (slugSettings && !slugSettings.enabled) {
+        toast.error("文章别名生成功能已禁用，请在 AI 设置中启用");
+        return;
+      }
+
+      // 使用专用的 slug 模型，如果没有设置则使用主模型
+      const slugModelToUse = slugSettings?.model || settings.model;
+
+      console.log("AI 设置:", {
+        hasApiKey: !!settings.api_key,
+        endpoint: settings.api_endpoint,
+        slugModel: slugModelToUse,
+      });
 
       if (!settings.api_key || !settings.api_endpoint) {
         toast.error("请先在 AI 设置中配置 API");
         return;
       }
 
+      console.log("调用 AI 生成 Slug，使用模型:", slugModelToUse);
       const slug = await generateSEOSlug(title, {
         endpoint: settings.api_endpoint,
         apiKey: settings.api_key,
-        model: settings.model,
+        model: slugModelToUse,
       });
+      console.log("生成结果:", slug);
 
       if (slug) {
         setPostSlug(slug);
         toast.success("已生成 SEO 友好的别名");
       } else {
-        toast.error("生成失败，请手动输入");
+        toast.error("生成失败，返回结果为空");
       }
     } catch (error) {
       console.error("生成别名失败:", error);
-      toast.error("生成失败，请手动输入");
+      toast.error(`生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setGeneratingSlug(false);
     }

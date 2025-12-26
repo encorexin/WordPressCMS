@@ -38,6 +38,8 @@ export async function saveAISettings(
         image_endpoint?: string;
         image_model?: string;
         image_enabled?: boolean;
+        slug_model?: string;
+        slug_enabled?: boolean;
     }
 ): Promise<AISettings> {
     const existing = await db.ai_settings.where('user_id').equals(userId).first();
@@ -96,6 +98,21 @@ export async function getImageSettings(userId: string): Promise<{
             apiKey: settings.image_api_key,
             endpoint: settings.image_endpoint || '',
             model: settings.image_model || '',
+        };
+    }
+    return null;
+}
+
+// 获取 Slug 生成设置
+export async function getSlugSettings(userId: string): Promise<{
+    enabled: boolean;
+    model: string;
+} | null> {
+    const settings = await getAISettings(userId);
+    if (settings) {
+        return {
+            enabled: settings.slug_enabled ?? true, // 默认启用
+            model: settings.slug_model || settings.model || '', // 默认使用主模型
         };
     }
     return null;

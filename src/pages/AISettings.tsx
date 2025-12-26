@@ -85,6 +85,10 @@ export default function AISettingsPage() {
     const [imageEndpoint, setImageEndpoint] = useState("");
     const [imageModel, setImageModel] = useState("");
 
+    // Slug 生成设置
+    const [slugEnabled, setSlugEnabled] = useState(true);
+    const [slugModel, setSlugModel] = useState("");
+
     useEffect(() => {
         loadSettings();
     }, [user]);
@@ -137,6 +141,14 @@ export default function AISettingsPage() {
                 if (settings.image_model) {
                     setImageModel(settings.image_model);
                 }
+
+                // 加载 Slug 生成设置
+                if (settings.slug_enabled !== undefined) {
+                    setSlugEnabled(settings.slug_enabled);
+                }
+                if (settings.slug_model) {
+                    setSlugModel(settings.slug_model);
+                }
             }
         } catch (error) {
             console.error("加载设置失败:", error);
@@ -177,6 +189,9 @@ export default function AISettingsPage() {
                 image_api_key: imageApiKey,
                 image_endpoint: imageEndpoint,
                 image_model: imageModel,
+                // Slug 生成设置
+                slug_enabled: slugEnabled,
+                slug_model: slugModel,
             });
             toast.success("设置保存成功");
         } catch (error) {
@@ -465,6 +480,54 @@ export default function AISettingsPage() {
                                     可用模型: {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.join(', ')}
                                 </p>
                             ) : null}
+                        </div>
+                    </CardContent>
+                )}
+            </Card>
+
+            {/* 文章别名生成设置 */}
+            <Card className="border-0 shadow-lg bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm">
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                            <div className="p-2 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg">
+                                <Zap className="h-5 w-5 text-white" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-lg">文章别名生成</CardTitle>
+                                <CardDescription>使用 AI 生成 SEO 友好的 URL 别名</CardDescription>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Label htmlFor="slug-enabled">启用</Label>
+                            <Switch
+                                id="slug-enabled"
+                                checked={slugEnabled}
+                                onCheckedChange={setSlugEnabled}
+                            />
+                        </div>
+                    </div>
+                </CardHeader>
+                {slugEnabled && (
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>使用模型</Label>
+                            <Select value={slugModel || "default"} onValueChange={(v) => setSlugModel(v === "default" ? "" : v)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="使用主 AI 模型" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="default">使用主 AI 模型</SelectItem>
+                                    {PRESET_MODELS.filter(m => m.value !== "custom").map((m) => (
+                                        <SelectItem key={m.value} value={m.value}>
+                                            {m.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                推荐使用快速模型如 deepseek-chat、gpt-3.5-turbo，不建议使用推理模型
+                            </p>
                         </div>
                     </CardContent>
                 )}

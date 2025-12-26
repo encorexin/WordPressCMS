@@ -198,3 +198,65 @@ export const sendChatStream = async (
     }
   }
 };
+
+// 生成 SEO 友好的文章别名
+export async function generateSEOSlug(
+  title: string,
+  options: {
+    endpoint: string;
+    apiKey?: string;
+    model?: string;
+  }
+): Promise<string> {
+  const prompt = `请将以下中文标题转换为SEO友好的英文URL别名(slug)。
+
+要求：
+1. 全部小写
+2. 单词之间用短横线(-)连接
+3. 只包含英文字母、数字和短横线
+4. 简洁明了，长度控制在3-8个单词
+5. 移除无意义的词（如 the, a, an 等）
+6. 直接输出结果，不要解释
+
+标题：${title}
+
+slug：`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (options.apiKey) {
+    headers["Authorization"] = `Bearer ${options.apiKey}`;
+  }
+
+  const body = {
+    messages: [{ role: "user", content: prompt }],
+    model: options.model || "gpt-3.5-turbo",
+    max_tokens: 100,
+    temperature: 0.3,
+  };
+
+  const response = await fetch(options.endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error("生成失败");
+  }
+
+  const data = await response.json();
+  let slug = data.choices?.[0]?.message?.content?.trim() || "";
+
+  // 清理结果
+  slug = slug
+    .toLowerCase()
+    .replace(/[^a-z0-9-\s]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return slug;
+}

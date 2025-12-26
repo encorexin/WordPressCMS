@@ -33,8 +33,8 @@ import { getEffectiveAISettings, getImageSettings } from "@/db/aiSettings";
 import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
 import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
 import type { ArticleInput, WordPressSite } from "@/types/types";
-import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb, ImagePlus, Download } from "lucide-react";
-import { sendChatStream } from "@/utils/aiChat";
+import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb, ImagePlus, Download, Wand2 } from "lucide-react";
+import { sendChatStream, generateSEOSlug } from "@/utils/aiChat";
 import { publishToWordPress, updateWordPressPost, getWordPressCategories, type WordPressCategory } from "@/utils/wordpress";
 import { generateImage, insertImageToContent, generateImagePrompt, IMAGE_PROVIDERS, type ImageGenerationConfig } from "@/utils/imageGeneration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -77,6 +77,7 @@ export default function ArticleEditor() {
   const [wpCategories, setWpCategories] = useState<WordPressCategory[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [postSlug, setPostSlug] = useState("");
+  const [generatingSlug, setGeneratingSlug] = useState(false);
 
   const form = useForm<ArticleInput>({
     defaultValues: {
@@ -178,6 +179,45 @@ export default function ArticleEditor() {
       }
     } catch (error) {
       console.error("加载图片设置失败:", error);
+    }
+  };
+
+  // 使用 AI 生成 SEO 友好的文章别名
+  const handleGenerateSlug = async () => {
+    const title = form.getValues("title");
+    if (!title) {
+      toast.error("请先输入文章标题");
+      return;
+    }
+
+    if (!user?.id) return;
+
+    try {
+      setGeneratingSlug(true);
+      const settings = await getEffectiveAISettings(user.id);
+
+      if (!settings.api_key || !settings.api_endpoint) {
+        toast.error("请先在 AI 设置中配置 API");
+        return;
+      }
+
+      const slug = await generateSEOSlug(title, {
+        endpoint: settings.api_endpoint,
+        apiKey: settings.api_key,
+        model: settings.model,
+      });
+
+      if (slug) {
+        setPostSlug(slug);
+        toast.success("已生成 SEO 友好的别名");
+      } else {
+        toast.error("生成失败，请手动输入");
+      }
+    } catch (error) {
+      console.error("生成别名失败:", error);
+      toast.error("生成失败，请手动输入");
+    } finally {
+      setGeneratingSlug(false);
     }
   };
 
@@ -785,7 +825,24 @@ export default function ArticleEditor() {
 
                     {/* 文章别名 */}
                     <div className="space-y-2">
-                      <Label className="text-sm">文章别名 (Slug)</Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm">文章别名 (Slug)</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleGenerateSlug}
+                          disabled={generatingSlug}
+                          className="h-6 px-2 text-xs"
+                        >
+                          {generatingSlug ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <Wand2 className="h-3 w-3 mr-1" />
+                          )}
+                          AI 生成
+                        </Button>
+                      </div>
                       <Input
                         placeholder="留空自动生成，如: my-article-title"
                         value={postSlug}
@@ -793,7 +850,7 @@ export default function ArticleEditor() {
                         className="text-sm"
                       />
                       <p className="text-xs text-muted-foreground">
-                        用于生成 SEO 友好的 URL
+                        用于生成 SEO 友好的 URL，点击 AI 生成可根据标题自动生成
                       </p>
                     </div>
 

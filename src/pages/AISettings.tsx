@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/LocalAuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,43 +25,145 @@ import type { AISettings } from "@/db/database";
 import { IMAGE_PROVIDERS } from "@/utils/imageGeneration";
 import { Switch } from "@/components/ui/switch";
 
-const PRESET_MODELS = [
-    // OpenAI
-    { value: "gpt-4o", label: "GPT-4o" },
-    { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-    { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-    { value: "gpt-4", label: "GPT-4" },
-    { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
-    { value: "o1-preview", label: "o1 Preview" },
-    { value: "o1-mini", label: "o1 Mini" },
-    // DeepSeek
-    { value: "deepseek-chat", label: "DeepSeek Chat (V3)" },
-    { value: "deepseek-reasoner", label: "DeepSeek Reasoner (R1)" },
-    // Claude
-    { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
-    { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
-    { value: "claude-3-opus-20240229", label: "Claude 3 Opus" },
-    // Google
-    { value: "gemini-2.0-flash-exp", label: "Gemini 2.0 Flash" },
-    { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-    // 国内模型
-    { value: "qwen-max", label: "通义千问 Max" },
-    { value: "qwen-plus", label: "通义千问 Plus" },
-    { value: "qwen-turbo", label: "通义千问 Turbo" },
-    { value: "glm-4-plus", label: "智谱 GLM-4 Plus" },
-    { value: "moonshot-v1-128k", label: "Moonshot (Kimi)" },
-    { value: "yi-large", label: "零一万物 Yi-Large" },
-    // 自定义
-    { value: "custom", label: "自定义模型..." },
+// 按端点/提供商分类的模型配置
+const ENDPOINT_MODELS = {
+    openai: {
+        label: "OpenAI",
+        endpoint: "https://api.openai.com/v1/chat/completions",
+        models: [
+            { value: "gpt-4.5-preview", label: "GPT-4.5 Preview" },
+            { value: "gpt-4o", label: "GPT-4o" },
+            { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+            { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
+            { value: "gpt-4", label: "GPT-4" },
+            { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
+            { value: "o3-mini", label: "o3 Mini" },
+            { value: "o1", label: "o1" },
+            { value: "o1-preview", label: "o1 Preview" },
+            { value: "o1-mini", label: "o1 Mini" },
+        ],
+    },
+    anthropic: {
+        label: "Anthropic (Claude)",
+        endpoint: "https://api.anthropic.com/v1/messages",
+        models: [
+            { value: "claude-3-7-sonnet-20250219", label: "Claude 3.7 Sonnet" },
+            { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
+            { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
+            { value: "claude-3-opus-20240229", label: "Claude 3 Opus" },
+        ],
+    },
+    deepseek: {
+        label: "DeepSeek",
+        endpoint: "https://api.deepseek.com/v1/chat/completions",
+        models: [
+            { value: "deepseek-chat", label: "DeepSeek Chat (V3)" },
+            { value: "deepseek-reasoner", label: "DeepSeek Reasoner (R1)" },
+        ],
+    },
+    google: {
+        label: "Google (Gemini)",
+        endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        models: [
+            { value: "gemini-2.5-pro-exp-03-25", label: "Gemini 2.5 Pro Exp" },
+            { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+            { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
+            { value: "gemini-2.0-pro-exp-02-05", label: "Gemini 2.0 Pro Exp" },
+            { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
+            { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+        ],
+    },
+    aliyun: {
+        label: "阿里云百炼",
+        endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        models: [
+            { value: "qwen-max", label: "通义千问 Max" },
+            { value: "qwen-plus", label: "通义千问 Plus" },
+            { value: "qwen-turbo", label: "通义千问 Turbo" },
+            { value: "qwen-coder-plus", label: "通义千问 Coder Plus" },
+            { value: "qwen-vl-max", label: "通义千问 VL Max" },
+        ],
+    },
+    zhipu: {
+        label: "智谱 AI",
+        endpoint: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        models: [
+            { value: "glm-4-plus", label: "GLM-4 Plus" },
+            { value: "glm-4-air", label: "GLM-4 Air" },
+            { value: "glm-4-flash", label: "GLM-4 Flash" },
+            { value: "glm-4-long", label: "GLM-4 Long" },
+            { value: "glm-4", label: "GLM-4" },
+        ],
+    },
+    moonshot: {
+        label: "Moonshot (Kimi)",
+        endpoint: "https://api.moonshot.cn/v1/chat/completions",
+        models: [
+            { value: "moonshot-v1-8k", label: "Kimi K1 (8K)" },
+            { value: "moonshot-v1-32k", label: "Kimi K1 (32K)" },
+            { value: "moonshot-v1-128k", label: "Kimi K1 (128K)" },
+            { value: "kimi-latest", label: "Kimi Latest" },
+        ],
+    },
+    siliconflow: {
+        label: "SiliconFlow",
+        endpoint: "https://api.siliconflow.cn/v1/chat/completions",
+        models: [
+            { value: "deepseek-ai/DeepSeek-V3", label: "DeepSeek V3" },
+            { value: "deepseek-ai/DeepSeek-R1", label: "DeepSeek R1" },
+            { value: "Qwen/Qwen2.5-72B-Instruct", label: "Qwen2.5 72B" },
+            { value: "meta-llama/Llama-3.3-70B-Instruct", label: "Llama 3.3 70B" },
+            { value: "THUDM/glm-4-9b-chat", label: "GLM-4 9B" },
+        ],
+    },
+    groq: {
+        label: "Groq",
+        endpoint: "https://api.groq.com/openai/v1/chat/completions",
+        models: [
+            { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
+            { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B" },
+            { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
+            { value: "gemma2-9b-it", label: "Gemma 2 9B" },
+        ],
+    },
+    together: {
+        label: "Together AI",
+        endpoint: "https://api.together.xyz/v1/chat/completions",
+        models: [
+            { value: "meta-llama/Llama-3.3-70B-Instruct-Turbo", label: "Llama 3.3 70B" },
+            { value: "meta-llama/Llama-3.2-3B-Instruct-Turbo", label: "Llama 3.2 3B" },
+            { value: "Qwen/Qwen2.5-72B-Instruct-Turbo", label: "Qwen2.5 72B" },
+            { value: "deepseek-ai/DeepSeek-V3", label: "DeepSeek V3" },
+        ],
+    },
+    openrouter: {
+        label: "OpenRouter",
+        endpoint: "https://openrouter.ai/api/v1/chat/completions",
+        models: [
+            { value: "anthropic/claude-3.7-sonnet", label: "Claude 3.7 Sonnet" },
+            { value: "openai/gpt-4o", label: "GPT-4o" },
+            { value: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash" },
+            { value: "deepseek/deepseek-chat", label: "DeepSeek V3" },
+            { value: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B" },
+        ],
+    },
+} as const;
+
+// 生成端点选项
+const PRESET_ENDPOINTS = [
+    ...Object.entries(ENDPOINT_MODELS).map(([key, config]) => ({
+        value: config.endpoint,
+        label: config.label,
+        key,
+    })),
+    { value: "custom", label: "自定义端点...", key: "custom" },
 ];
 
-const PRESET_ENDPOINTS = [
-    { value: "https://api.openai.com/v1/chat/completions", label: "OpenAI 官方" },
-    { value: "https://api.anthropic.com/v1/messages", label: "Anthropic (Claude)" },
-    { value: "https://api.deepseek.com/v1/chat/completions", label: "DeepSeek" },
-    { value: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", label: "阿里云百炼" },
-    { value: "custom", label: "自定义端点..." },
-];
+// 生成所有模型选项（用于自定义端点）
+const ALL_MODELS = Object.values(ENDPOINT_MODELS).flatMap(config => config.models);
+
+// 自定义模型选项
+const CUSTOM_MODEL_OPTION = { value: "custom", label: "自定义模型..." };
 
 export default function AISettingsPage() {
     const { user } = useAuth();
@@ -72,11 +174,13 @@ export default function AISettingsPage() {
     const [apiEndpoint, setApiEndpoint] = useState("https://api.openai.com/v1/chat/completions");
     const [customEndpoint, setCustomEndpoint] = useState("");
     const [apiKey, setApiKey] = useState("");
-    const [model, setModel] = useState("gpt-3.5-turbo");
+    const [model, setModel] = useState("gpt-4o");
     const [customModel, setCustomModel] = useState("");
     const [systemPrompt, setSystemPrompt] = useState(getDefaultSystemPrompt());
     const [useCustomEndpoint, setUseCustomEndpoint] = useState(false);
     const [useCustomModel, setUseCustomModel] = useState(false);
+    // 当前选择的端点提供商
+    const [selectedProvider, setSelectedProvider] = useState<keyof typeof ENDPOINT_MODELS | "custom">("openai");
 
     // 图片生成设置
     const [imageEnabled, setImageEnabled] = useState(false);
@@ -88,6 +192,20 @@ export default function AISettingsPage() {
     // Slug 生成设置
     const [slugEnabled, setSlugEnabled] = useState(true);
     const [slugModel, setSlugModel] = useState("");
+
+    // 根据当前端点获取可用模型
+    const getAvailableModels = () => {
+        if (useCustomEndpoint) {
+            return [...ALL_MODELS, CUSTOM_MODEL_OPTION];
+        }
+        const provider = Object.entries(ENDPOINT_MODELS).find(
+            ([, config]) => config.endpoint === apiEndpoint
+        );
+        if (provider) {
+            return [...provider[1].models, CUSTOM_MODEL_OPTION];
+        }
+        return [...ALL_MODELS, CUSTOM_MODEL_OPTION];
+    };
 
     useEffect(() => {
         loadSettings();
@@ -102,17 +220,24 @@ export default function AISettingsPage() {
             if (settings) {
                 // 检查是否是预设端点
                 const presetEndpoint = PRESET_ENDPOINTS.find(e => e.value === settings.api_endpoint);
-                if (presetEndpoint) {
+                if (presetEndpoint && presetEndpoint.key !== "custom") {
                     setApiEndpoint(settings.api_endpoint);
                     setUseCustomEndpoint(false);
+                    setSelectedProvider(presetEndpoint.key as keyof typeof ENDPOINT_MODELS);
                 } else {
                     setApiEndpoint("custom");
                     setCustomEndpoint(settings.api_endpoint);
                     setUseCustomEndpoint(true);
+                    setSelectedProvider("custom");
                 }
 
-                // 检查是否是预设模型
-                const presetModel = PRESET_MODELS.find(m => m.value === settings.model);
+                // 检查是否是当前端点支持的模型
+                const availableModels = useCustomEndpoint
+                    ? ALL_MODELS
+                    : (presetEndpoint && presetEndpoint.key !== "custom"
+                        ? ENDPOINT_MODELS[presetEndpoint.key as keyof typeof ENDPOINT_MODELS].models
+                        : ALL_MODELS);
+                const presetModel = availableModels.find(m => m.value === settings.model);
                 if (presetModel) {
                     setModel(settings.model);
                     setUseCustomModel(false);
@@ -234,9 +359,20 @@ export default function AISettingsPage() {
         if (value === "custom") {
             setUseCustomEndpoint(true);
             setApiEndpoint("custom");
+            setSelectedProvider("custom");
         } else {
             setUseCustomEndpoint(false);
             setApiEndpoint(value);
+            // 找到对应的提供商
+            const provider = Object.entries(ENDPOINT_MODELS).find(
+                ([, config]) => config.endpoint === value
+            );
+            if (provider) {
+                setSelectedProvider(provider[0] as keyof typeof ENDPOINT_MODELS);
+                // 自动选择该端点的第一个模型
+                setModel(provider[1].models[0].value);
+                setUseCustomModel(false);
+            }
         }
     };
 
@@ -330,11 +466,33 @@ export default function AISettingsPage() {
                                 <SelectValue placeholder="选择模型" />
                             </SelectTrigger>
                             <SelectContent>
-                                {PRESET_MODELS.map((m) => (
-                                    <SelectItem key={m.value} value={m.value}>
-                                        {m.label}
-                                    </SelectItem>
-                                ))}
+                                {useCustomEndpoint ? (
+                                    // 自定义端点：按提供商分组显示所有模型
+                                    Object.entries(ENDPOINT_MODELS).map(([key, config]) => (
+                                        <React.Fragment key={key}>
+                                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                                                {config.label}
+                                            </div>
+                                            {config.models.map((m) => (
+                                                <SelectItem key={m.value} value={m.value} className="pl-6">
+                                                    {m.label}
+                                                </SelectItem>
+                                            ))}
+                                        </React.Fragment>
+                                    ))
+                                ) : (
+                                    // 预设端点：只显示该端点支持的模型
+                                    getAvailableModels()
+                                        .filter(m => m.value !== "custom")
+                                        .map((m) => (
+                                            <SelectItem key={m.value} value={m.value}>
+                                                {m.label}
+                                            </SelectItem>
+                                        ))
+                                )}
+                                <SelectItem value="custom" className="border-t mt-1 pt-1">
+                                    自定义模型...
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                         {useCustomModel && (
@@ -518,10 +676,17 @@ export default function AISettingsPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="default">使用主 AI 模型</SelectItem>
-                                    {PRESET_MODELS.filter(m => m.value !== "custom").map((m) => (
-                                        <SelectItem key={m.value} value={m.value}>
-                                            {m.label}
-                                        </SelectItem>
+                                    {Object.entries(ENDPOINT_MODELS).map(([key, config]) => (
+                                        <React.Fragment key={key}>
+                                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                                                {config.label}
+                                            </div>
+                                            {config.models.map((m) => (
+                                                <SelectItem key={m.value} value={m.value} className="pl-6">
+                                                    {m.label}
+                                                </SelectItem>
+                                            ))}
+                                        </React.Fragment>
                                     ))}
                                 </SelectContent>
                             </Select>

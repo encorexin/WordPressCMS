@@ -1,12 +1,12 @@
-import ky, {
-  type KyResponse,
-  type AfterResponseHook,
-  type NormalizedOptions,
-} from "ky";
 import {
   createParser,
   type EventSourceParser,
 } from "eventsource-parser";
+import ky, {
+  type AfterResponseHook,
+  type KyResponse,
+  type NormalizedOptions,
+} from "ky";
 
 export interface SSEOptions {
   onData: (data: string) => void;

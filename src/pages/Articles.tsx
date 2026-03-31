@@ -1,16 +1,9 @@
-import { useEffect, useState, useMemo } from "react";
-import { useAuth } from "@/context/LocalAuthProvider";
+import { format } from "date-fns";
+import { zhCN } from "date-fns/locale";
+import { Calendar, CheckSquare, Edit, Eye, FileText, Filter, Globe, Plus, Square, Trash, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,23 +15,41 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
-import { getArticles, deleteArticle } from "@/db/api";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/context/LocalAuthProvider";
+import { deleteArticle, getArticles } from "@/db/api";
+import { deleteAllArticleVersions } from "@/db/versionService";
 import type { ArticleWithSite } from "@/types/types";
-import { Plus, FileText, Edit, Trash2, Calendar, Globe, Eye, Filter } from "lucide-react";
-import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
 
 export default function Articles() {
-  const { user } = useAuth();
+  const { user, isDecrypted } = useAuth();
   const navigate = useNavigate();
   const [articles, setArticles] = useState<ArticleWithSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSite, setSelectedSite] = useState<string>("all");
+  const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
+  const [isBatchMode, setIsBatchMode] = useState(false);
 
   useEffect(() => {
-    loadArticles();
-  }, [user]);
+    // 只有在用户已登录且数据已解密时才加载
+    if (user?.id && isDecrypted) {
+      loadArticles();
+    } else if (!user) {
+      // 用户未登录，清空数据
+      setArticles([]);
+      setLoading(false);
+    }
+  }, [user, isDecrypted]);
 
   const loadArticles = async () => {
     try {
@@ -54,13 +65,63 @@ export default function Articles() {
   };
 
   const handleDelete = async (articleId: string) => {
+    if (!user?.id) return;
     try {
-      await deleteArticle(articleId);
+      await deleteArticle(user.id, articleId);
+      await deleteAllArticleVersions(user.id, articleId);
       toast.success("文章删除成功");
       loadArticles();
     } catch (error) {
       toast.error("删除失败");
       console.error(error);
+    }
+  };
+
+  // 批量删除
+  const handleBatchDelete = async () => {
+    if (!user?.id) return;
+    if (selectedArticles.size === 0) {
+      toast.error("请先选择要删除的文章");
+      return;
+    }
+    if (!confirm(`确定要删除选中的 ${selectedArticles.size} 篇文章吗？此操作无法撤销。`)) {
+      return;
+    }
+    try {
+      const promises = Array.from(selectedArticles).map(async (id) => {
+        await deleteArticle(user.id, id);
+        await deleteAllArticleVersions(user.id, id);
+      });
+      await Promise.all(promises);
+      toast.success(`成功删除 ${selectedArticles.size} 篇文章`);
+      setSelectedArticles(new Set());
+      setIsBatchMode(false);
+      loadArticles();
+    } catch (error) {
+      toast.error("批量删除失败");
+      console.error(error);
+    }
+  };
+
+  // 切换文章选择
+  const toggleArticleSelection = (articleId: string) => {
+    setSelectedArticles((prev) => {
+      const next = new Set(prev);
+      if (next.has(articleId)) {
+        next.delete(articleId);
+      } else {
+        next.add(articleId);
+      }
+      return next;
+    });
+  };
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (selectedArticles.size === filteredArticles.length) {
+      setSelectedArticles(new Set());
+    } else {
+      setSelectedArticles(new Set(filteredArticles.map((a) => a.id)));
     }
   };
 
@@ -113,14 +174,64 @@ export default function Articles() {
               管理您的文章内容，支持AI生成和发布到WordPress
             </p>
           </div>
-          <Button
-            onClick={handleCreate}
-            className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            创建文章
-          </Button>
+          <div className="flex gap-2">
+            {filteredArticles.length > 0 && (
+              <Button
+                variant={isBatchMode ? "default" : "outline"}
+                onClick={() => {
+                  setIsBatchMode(!isBatchMode);
+                  setSelectedArticles(new Set());
+                }}
+                className="w-full sm:w-auto"
+              >
+                {isBatchMode ? (
+                  <CheckSquare className="mr-2 h-4 w-4" />
+                ) : (
+                  <Square className="mr-2 h-4 w-4" />
+                )}
+                {isBatchMode ? "退出批量" : "批量操作"}
+              </Button>
+            )}
+            <Button
+              onClick={handleCreate}
+              className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              创建文章
+            </Button>
+          </div>
         </div>
+
+        {/* 批量操作工具栏 */}
+        {isBatchMode && filteredArticles.length > 0 && (
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/50 dark:to-purple-950/50 backdrop-blur-sm">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="select-all"
+                    checked={selectedArticles.size === filteredArticles.length && filteredArticles.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                  <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                    全选 ({selectedArticles.size}/{filteredArticles.length})
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBatchDelete}
+                    disabled={selectedArticles.size === 0}
+                  >
+                    <Trash className="mr-2 h-4 w-4" />
+                    删除选中 ({selectedArticles.size})
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* 筛选器 */}
         {sites.length > 0 && (
@@ -198,12 +309,21 @@ export default function Articles() {
             {filteredArticles.map((article) => (
               <Card
                 key={article.id}
-                className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm"
+                className={`border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm ${
+                  selectedArticles.has(article.id) ? "ring-2 ring-primary" : ""
+                }`}
               >
                 <CardContent className="p-4 sm:p-6">
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     <div className="flex-1 space-y-3 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        {isBatchMode && (
+                          <Checkbox
+                            checked={selectedArticles.has(article.id)}
+                            onCheckedChange={() => toggleArticleSelection(article.id)}
+                            className="mr-2"
+                          />
+                        )}
                         <h3 className="text-lg sm:text-xl font-semibold break-words">
                           {article.title}
                         </h3>

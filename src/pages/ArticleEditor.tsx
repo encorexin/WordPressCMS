@@ -1,8 +1,20 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "@/context/LocalAuthProvider";
+import { ArrowLeft, Download, FileText, Globe, History, ImagePlus, Lightbulb, Loader2, PenTool, Save, Send, Sparkles, Wand2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
+import { Streamdown } from "streamdown";
+import { RichTextEditor } from "@/components/common/RichTextEditor";
+import { VersionHistoryDialog } from "@/components/common/VersionHistoryDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Form,
   FormControl,
@@ -12,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -20,34 +32,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useForm } from "react-hook-form";
-import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/context/LocalAuthProvider";
+import { getEffectiveAISettings, getImageSettings, getSlugSettings } from "@/db/aiSettings";
 import {
-  getArticle,
   createArticle,
+  getArticle,
+  getWordPressSites,
   updateArticle,
   updateArticleStatus,
-  getWordPressSites,
 } from "@/db/api";
-import { getEffectiveAISettings, getImageSettings, getSlugSettings } from "@/db/aiSettings";
-import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
-import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
-import type { ArticleInput, WordPressSite } from "@/types/types";
-import { ArrowLeft, Save, Send, Sparkles, Loader2, Globe, Lightbulb, ImagePlus, Download, Wand2 } from "lucide-react";
-import { sendChatStream, generateSEOSlug } from "@/utils/aiChat";
-import { publishToWordPress, updateWordPressPost, getWordPressCategories, type WordPressCategory } from "@/utils/wordpress";
-import { generateImage, insertImageToContent, generateImagePrompt, IMAGE_PROVIDERS, type ImageGenerationConfig } from "@/utils/imageGeneration";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Streamdown } from "streamdown";
+import type { ArticleVersion } from "@/db/database";
 import { downloadSingleArticle } from "@/db/dataExport";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { type ArticleTemplate, getTemplates, initDefaultTemplates } from "@/db/templateService";
+import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
+import { createArticleVersion } from "@/db/versionService";
+import { useHotkeys } from "@/hooks/use-hotkeys";
+import type { ArticleInput, WordPressSite } from "@/types/types";
+import { generateSEOSlug, sendChatStream } from "@/utils/aiChat";
+import { generateImage, generateImagePrompt, IMAGE_PROVIDERS, type ImageGenerationConfig, insertImageToContent } from "@/utils/imageGeneration";
+import { getWordPressCategories, publishToWordPress, updateWordPressPost, type WordPressCategory } from "@/utils/wordpress";
 
 
 export default function ArticleEditor() {
@@ -78,6 +84,10 @@ export default function ArticleEditor() {
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [postSlug, setPostSlug] = useState("");
   const [generatingSlug, setGeneratingSlug] = useState(false);
+  const [showVersionDialog, setShowVersionDialog] = useState(false);
+  const [useRichEditor, setUseRichEditor] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const form = useForm<ArticleInput>({
     defaultValues: {
@@ -302,9 +312,10 @@ export default function ArticleEditor() {
 
 
   const loadArticle = async (articleId: string) => {
+    if (!user?.id) return;
     try {
       setLoading(true);
-      const article = await getArticle(articleId);
+      const article = await getArticle(user.id, articleId);
       if (article) {
         form.reset({
           title: article.title,
@@ -327,7 +338,7 @@ export default function ArticleEditor() {
     }
   };
 
-  const handleSave = async (data: ArticleInput) => {
+  const handleSave = useCallback(async (data: ArticleInput) => {
     try {
       if (!user?.id) {
         toast.error("用户未登录");
@@ -338,15 +349,53 @@ export default function ArticleEditor() {
         await createArticle(user.id, data);
         toast.success("文章创建成功");
       } else if (id) {
-        await updateArticle(id, data);
-        toast.success("文章保存成功");
+        // 先创建版本历史
+        await createArticleVersion(id, user.id, {
+          title: data.title,
+          content: data.content || null,
+          keywords: data.keywords || null,
+          template: data.template || null,
+        });
+        // 再更新文章
+        await updateArticle(user.id, id, data);
+        toast.success("文章保存成功，已创建版本历史");
       }
       navigate("/articles");
     } catch (error) {
       toast.error("保存失败");
       console.error(error);
     }
+  }, [user?.id, isNew, id, navigate]);
+
+  // 恢复版本
+  const handleRestoreVersion = (version: ArticleVersion) => {
+    form.setValue("title", version.title);
+    form.setValue("content", version.content || "");
+    form.setValue("keywords", version.keywords || "");
+    form.setValue("template", version.template || "");
+    setCurrentContent(version.content || "");
   };
+
+  // 注册编辑器快捷键
+  useHotkeys([
+    {
+      key: "s",
+      ctrl: true,
+      handler: () => {
+        form.handleSubmit(handleSave)();
+      },
+    },
+    {
+      key: "p",
+      ctrl: true,
+      handler: () => {
+        // 发布前确认
+        if (window.confirm("确定要发布这篇文章吗？")) {
+          handlePublish();
+        }
+      },
+    },
+  ]);
 
   const handleGenerate = async () => {
     const keywords = form.getValues("keywords");
@@ -386,6 +435,18 @@ export default function ArticleEditor() {
       // 用户消息：简洁的生成请求
       const userMessage = `关键词：${keywords}\n模板风格：${template || "默认模板"}\n\n请直接输出文章内容：`;
 
+      // 创建新的 AbortController
+      abortControllerRef.current = new AbortController();
+      setGenerateProgress(0);
+
+      // 模拟进度增长
+      const progressInterval = setInterval(() => {
+        setGenerateProgress((prev) => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 15;
+        });
+      }, 1000);
+
       await sendChatStream({
         endpoint: aiSettings.api_endpoint,
         apiKey: aiSettings.api_key,
@@ -400,11 +461,14 @@ export default function ArticleEditor() {
             content: userMessage,
           },
         ],
+        signal: abortControllerRef.current.signal,
         onUpdate: (content: string) => {
           setCurrentContent(content);
           form.setValue("content", content);
         },
         onComplete: async () => {
+          clearInterval(progressInterval);
+          setGenerateProgress(100);
           toast.success("文章生成完成");
           setGenerating(false);
           // 如果选择了主题，标记为已使用
@@ -415,7 +479,12 @@ export default function ArticleEditor() {
           }
         },
         onError: (error: Error) => {
-          toast.error("生成失败: " + error.message);
+          clearInterval(progressInterval);
+          if (error.name === "AbortError") {
+            toast.info("生成已取消");
+          } else {
+            toast.error("生成失败: " + error.message);
+          }
           setGenerating(false);
         },
       });
@@ -423,6 +492,14 @@ export default function ArticleEditor() {
       toast.error("生成失败");
       console.error(error);
       setGenerating(false);
+    }
+  };
+
+  // 停止生成
+  const handleStopGenerate = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
   };
 
@@ -466,8 +543,8 @@ export default function ArticleEditor() {
           site_id: siteId,
         });
         articleId = article.id;
-      } else if (id) {
-        await updateArticle(id, {
+      } else if (id && user?.id) {
+        await updateArticle(user.id, id, {
           title,
           content,
           site_id: siteId,
@@ -534,6 +611,16 @@ export default function ArticleEditor() {
             </h1>
           </div>
           <div className="flex gap-2">
+            {!isNew && (
+              <Button
+                variant="outline"
+                onClick={() => setShowVersionDialog(true)}
+                className="hidden sm:flex border-2 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+              >
+                <History className="mr-2 h-4 w-4" />
+                历史版本
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={form.handleSubmit(handleSave)}
@@ -561,6 +648,12 @@ export default function ArticleEditor() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {!isNew && (
+                  <DropdownMenuItem onClick={() => setShowVersionDialog(true)}>
+                    <History className="mr-2 h-4 w-4" />
+                    历史版本
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => {
                   const article = {
                     title: form.getValues("title") || "无标题",
@@ -634,33 +727,60 @@ export default function ArticleEditor() {
                       name="content"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>内容</FormLabel>
+                          <div className="flex items-center justify-between mb-2">
+                            <FormLabel>内容</FormLabel>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                id="editor-mode"
+                                checked={useRichEditor}
+                                onCheckedChange={setUseRichEditor}
+                              />
+                              <Label htmlFor="editor-mode" className="text-sm cursor-pointer flex items-center gap-1">
+                                {useRichEditor ? (
+                                  <><PenTool className="h-3 w-3" /> 富文本</>
+                                ) : (
+                                  <><FileText className="h-3 w-3" /> Markdown</>
+                                )}
+                              </Label>
+                            </div>
+                          </div>
                           <FormControl>
-                            <Tabs defaultValue="edit" className="w-full">
-                              <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="edit">编辑</TabsTrigger>
-                                <TabsTrigger value="preview">预览</TabsTrigger>
-                              </TabsList>
-                              <TabsContent value="edit">
-                                <Textarea
-                                  placeholder="输入文章内容（支持Markdown格式）"
-                                  className="min-h-[300px] sm:min-h-[400px] font-mono text-sm sm:text-base"
-                                  {...field}
-                                  value={currentContent || field.value}
-                                  onChange={(e) => {
-                                    field.onChange(e);
-                                    setCurrentContent(e.target.value);
-                                  }}
-                                />
-                              </TabsContent>
-                              <TabsContent value="preview">
-                                <div className="min-h-[300px] sm:min-h-[400px] p-3 sm:p-4 border rounded-md prose prose-sm max-w-none dark:prose-invert overflow-x-auto overflow-y-auto break-words [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_pre_code]:break-normal [&_table]:block [&_table]:overflow-x-auto">
-                                  <Streamdown>
-                                    {currentContent || field.value || "暂无内容"}
-                                  </Streamdown>
-                                </div>
-                              </TabsContent>
-                            </Tabs>
+                            {useRichEditor ? (
+                              <RichTextEditor
+                                content={currentContent || field.value || ""}
+                                onChange={(content) => {
+                                  field.onChange(content);
+                                  setCurrentContent(content);
+                                }}
+                                placeholder="开始写作..."
+                              />
+                            ) : (
+                              <Tabs defaultValue="edit" className="w-full">
+                                <TabsList className="grid w-full grid-cols-2">
+                                  <TabsTrigger value="edit">编辑</TabsTrigger>
+                                  <TabsTrigger value="preview">预览</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="edit">
+                                  <Textarea
+                                    placeholder="输入文章内容（支持Markdown格式）"
+                                    className="min-h-[300px] sm:min-h-[400px] font-mono text-sm sm:text-base"
+                                    {...field}
+                                    value={currentContent || field.value}
+                                    onChange={(e) => {
+                                      field.onChange(e);
+                                      setCurrentContent(e.target.value);
+                                    }}
+                                  />
+                                </TabsContent>
+                                <TabsContent value="preview">
+                                  <div className="min-h-[300px] sm:min-h-[400px] p-3 sm:p-4 border rounded-md prose prose-sm max-w-none dark:prose-invert overflow-x-auto overflow-y-auto break-words [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_pre_code]:break-normal [&_table]:block [&_table]:overflow-x-auto">
+                                    <Streamdown>
+                                      {currentContent || field.value || "暂无内容"}
+                                    </Streamdown>
+                                  </div>
+                                </TabsContent>
+                              </Tabs>
+                            )}
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -772,24 +892,38 @@ export default function ArticleEditor() {
                         </FormItem>
                       )}
                     />
-                    <Button
-                      type="button"
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
-                      onClick={handleGenerate}
-                      disabled={generating}
-                    >
-                      {generating ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          生成中...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="mr-2 h-4 w-4" />
-                          AI生成文章
-                        </>
+                    <div className="space-y-2">
+                      <Button
+                        type="button"
+                        className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
+                        onClick={generating ? handleStopGenerate : handleGenerate}
+                      >
+                        {generating ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            停止生成
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            AI生成文章
+                          </>
+                        )}
+                      </Button>
+                      {generating && (
+                        <div className="space-y-1">
+                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
+                              style={{ width: `${Math.min(generateProgress, 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-center text-muted-foreground">
+                            正在生成... {Math.round(Math.min(generateProgress, 100))}%
+                          </p>
+                        </div>
                       )}
-                    </Button>
+                    </div>
                     <Button
                       type="button"
                       variant="outline"
@@ -927,26 +1061,20 @@ export default function ArticleEditor() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ImagePlus className="h-5 w-5" />
-              AI 生成配图
+              生成文章配图
             </DialogTitle>
             <DialogDescription>
-              使用 AI 为文章生成配图
+              使用 AI 生成与文章内容相关的配图
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* 提供商选择 */}
             <div className="space-y-2">
-              <Label>图片生成服务</Label>
-              <Select value={imageProvider} onValueChange={(v) => {
-                setImageProvider(v);
-                // 设置默认端点
-                const provider = IMAGE_PROVIDERS.find(p => p.value === v);
-                if (provider && provider.endpoint) {
-                  setImageEndpoint(provider.endpoint);
-                }
-              }}>
+              <Label>图片服务提供商</Label>
+              <Select value={imageProvider} onValueChange={setImageProvider}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="选择提供商" />
                 </SelectTrigger>
                 <SelectContent>
                   {IMAGE_PROVIDERS.map((provider) => (
@@ -956,43 +1084,38 @@ export default function ArticleEditor() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.description}
-              </p>
             </div>
 
-            {/* 自定义端点输入 */}
-            <div className="space-y-2">
-              <Label>API 端点 {imageProvider === 'custom' ? '*' : '(可选)'}</Label>
-              <Input
-                placeholder={IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.endpoint || "输入 API 端点"}
-                value={imageEndpoint}
-                onChange={(e) => setImageEndpoint(e.target.value)}
-              />
-            </div>
-
-            {/* 模型选择 */}
-            <div className="space-y-2">
-              <Label>模型 (可选)</Label>
-              <Input
-                placeholder={IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.[0] || "使用默认模型"}
-                value={imageModel}
-                onChange={(e) => setImageModel(e.target.value)}
-              />
-              {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.length ? (
-                <p className="text-xs text-muted-foreground">
-                  可用模型: {IMAGE_PROVIDERS.find(p => p.value === imageProvider)?.models?.join(', ')}
-                </p>
-              ) : null}
-            </div>
-
+            {/* API Key */}
             <div className="space-y-2">
               <Label>API Key</Label>
               <Input
                 type="password"
-                placeholder="输入对应服务的 API Key"
+                placeholder="输入 API Key"
                 value={imageApiKey}
                 onChange={(e) => setImageApiKey(e.target.value)}
+              />
+            </div>
+
+            {/* 自定义端点 */}
+            {imageProvider === 'custom' && (
+              <div className="space-y-2">
+                <Label>API 端点</Label>
+                <Input
+                  placeholder="https://api.example.com/v1/images"
+                  value={imageEndpoint}
+                  onChange={(e) => setImageEndpoint(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* 模型 */}
+            <div className="space-y-2">
+              <Label>模型（可选）</Label>
+              <Input
+                placeholder={`默认: ${imageProvider === 'openai' ? 'dall-e-3' : ''}`}
+                value={imageModel}
+                onChange={(e) => setImageModel(e.target.value)}
               />
             </div>
 
@@ -1037,6 +1160,16 @@ export default function ArticleEditor() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 版本历史对话框 */}
+      <VersionHistoryDialog
+        articleId={id || null}
+        open={showVersionDialog}
+        onOpenChange={setShowVersionDialog}
+        onRestore={handleRestoreVersion}
+        currentTitle={form.getValues("title")}
+        currentContent={form.getValues("content") || ""}
+      />
     </div>
   );
 }

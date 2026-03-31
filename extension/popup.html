@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WordPress CMS 助手</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 360px;
+      min-height: 480px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .container {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    
+    .logo {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      background: white;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+    }
+    
+    h1 {
+      font-size: 20px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    
+    .subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-bottom: 24px;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      width: 100%;
+      margin-bottom: 24px;
+    }
+    
+    .stat-item {
+      background: rgba(255,255,255,0.15);
+      padding: 12px 8px;
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+    
+    .btn {
+      padding: 14px 24px;
+      border-radius: 12px;
+      border: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .btn-primary {
+      background: white;
+      color: #667eea;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    }
+    
+    .btn-secondary {
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    
+    .features {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255,255,255,0.2);
+      width: 100%;
+    }
+    
+    .feature-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+    
+    .feature-tag {
+      background: rgba(255,255,255,0.15);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+    }
+    
+    .loading {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    
+    .loading.active {
+      display: flex;
+    }
+    
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">📝</div>
+    <h1>WordPress CMS 助手</h1>
+    <p class="subtitle">AI 驱动的内容管理工具</p>
+    
+    <div class="stats">
+      <div class="stat-item">
+        <div class="stat-value" id="article-count">-</div>
+        <div class="stat-label">文章</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="site-count">-</div>
+        <div class="stat-label">站点</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="template-count">-</div>
+        <div class="stat-label">模板</div>
+      </div>
+    </div>
+    
+    <div class="actions">
+      <button class="btn btn-primary" id="open-sidepanel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M9 3v18"/>
+        </svg>
+        打开侧边栏
+      </button>
+      <button class="btn btn-secondary" id="open-popup">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          <polyline points="15 3 21 3 21 9"/>
+          <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+        在新窗口打开
+      </button>
+    </div>
+    
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <span>加载中...</span>
+    </div>
+    
+    <div class="features">
+      <div class="feature-list">
+        <span class="feature-tag">🤖 AI 写作</span>
+        <span class="feature-tag">📤 一键发布</span>
+        <span class="feature-tag">🎨 模板管理</span>
+        <span class="feature-tag">🔐 数据加密</span>
+      </div>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

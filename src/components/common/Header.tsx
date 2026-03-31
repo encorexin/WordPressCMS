@@ -1,25 +1,39 @@
-import { useState, useEffect } from "react";
+import { Command, Globe, Keyboard, LogOut, Menu, Monitor, Moon, Search, Shield, Sun, User, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, LogOut, Shield, Globe, Sun, Moon, Monitor } from "lucide-react";
-import { useAuth } from "@/context/LocalAuthProvider";
-import { useTheme } from "@/context/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import routes from "../../routes";
+import { useAuth } from "@/context/LocalAuthProvider";
+import { useTheme } from "@/context/ThemeProvider";
 import { getProfile } from "@/db/api";
+import { useHotkey } from "@/hooks/use-hotkeys";
 import type { Profile } from "@/types/types";
+import routes from "../../routes";
+import { GlobalSearch } from "./GlobalSearch";
+import { HotkeyHelp } from "./HotkeyHelp";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
+
+  // 全局搜索快捷键 Ctrl+K
+  useHotkey("k", () => setSearchOpen(true), { ctrl: true });
+
+  // 快捷键帮助 ?
+  useHotkey("?", () => setHelpOpen(true));
 
   useEffect(() => {
     if (user?.id) {
@@ -87,33 +101,78 @@ const Header = () => {
               </Link>
             )}
 
-            {/* 主题切换 */}
+            {/* 搜索按钮 - 简化为图标 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSearchOpen(true)}
+              className="hidden md:flex"
+              title="全局搜索 (Ctrl+K)"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+
+            {/* 主题切换 - 简化为图标 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              title="切换主题"
+            >
+              <ThemeIcon className="h-4 w-4" />
+            </Button>
+
+            {/* 用户菜单 - 整合更多功能 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="ml-1">
-                  <ThemeIcon className="h-4 w-4" />
+                  <User className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setTheme("light")} className={theme === "light" ? "bg-accent" : ""}>
-                  <Sun className="mr-2 h-4 w-4" />
-                  浅色
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("dark")} className={theme === "dark" ? "bg-accent" : ""}>
-                  <Moon className="mr-2 h-4 w-4" />
-                  深色
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("system")} className={theme === "system" ? "bg-accent" : ""}>
-                  <Monitor className="mr-2 h-4 w-4" />
-                  跟随系统
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>我的账户</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => setSearchOpen(true)}>
+                    <Search className="mr-2 h-4 w-4" />
+                    全局搜索
+                    <kbd className="ml-auto text-[10px] bg-muted px-1 rounded">⌘K</kbd>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setHelpOpen(true)}>
+                    <Keyboard className="mr-2 h-4 w-4" />
+                    快捷键帮助
+                    <kbd className="ml-auto text-[10px] bg-muted px-1 rounded">?</kbd>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>主题</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => setTheme("light")} className={theme === "light" ? "bg-accent" : ""}>
+                    <Sun className="mr-2 h-4 w-4" />
+                    浅色
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme("dark")} className={theme === "dark" ? "bg-accent" : ""}>
+                    <Moon className="mr-2 h-4 w-4" />
+                    深色
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme("system")} className={theme === "system" ? "bg-accent" : ""}>
+                    <Monitor className="mr-2 h-4 w-4" />
+                    跟随系统
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  退出登录
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button variant="ghost" size="sm" onClick={logout} className="ml-2">
-              <LogOut className="h-4 w-4 mr-2" />
-              退出
-            </Button>
+            {/* 全局搜索弹窗 */}
+            <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+
+            {/* 快捷键帮助弹窗 */}
+            <HotkeyHelp open={helpOpen} onOpenChange={setHelpOpen} />
           </div>
 
           <div className="md:hidden flex items-center space-x-1">

@@ -100,15 +100,15 @@ export default function Sites() {
   };
 
   const handleSubmit = async (data: WordPressSiteInput) => {
+    if (!user?.id) {
+      toast.error("用户未登录");
+      return;
+    }
     try {
       if (editingSite) {
-        await updateWordPressSite(editingSite.id, data);
+        await updateWordPressSite(user.id, editingSite.id, data);
         toast.success("站点更新成功");
       } else {
-        if (!user?.id) {
-          toast.error("用户未登录");
-          return;
-        }
         await createWordPressSite(user.id, data);
         toast.success("站点添加成功");
       }
@@ -123,8 +123,9 @@ export default function Sites() {
   };
 
   const handleDelete = async (siteId: string) => {
+    if (!user?.id) return;
     try {
-      await deleteWordPressSite(siteId);
+      await deleteWordPressSite(user.id, siteId);
       toast.success("站点删除成功");
       loadSites();
     } catch (error) {
@@ -134,15 +135,16 @@ export default function Sites() {
   };
 
   const handleTestConnection = async (site: WordPressSite) => {
+    if (!user?.id) return;
     try {
       setTestingConnection(site.id);
       const result = await testWordPressConnection(site);
       if (result.success) {
         toast.success(result.message);
-        await updateSiteStatus(site.id, "active");
+        await updateSiteStatus(user.id, site.id, "active");
       } else {
         toast.error(result.message);
-        await updateSiteStatus(site.id, "inactive");
+        await updateSiteStatus(user.id, site.id, "inactive");
       }
       loadSites();
     } catch (error) {

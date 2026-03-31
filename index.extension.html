@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WordPress CMS 助手</title>
+    <meta name="description" content="AI 驱动的 WordPress 内容管理工具" />
+    <!-- 扩展环境安全策略由 manifest.json 控制 -->
+    <style>
+      /* 扩展环境基础样式 */
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow-x: hidden;
+        overflow-y: auto;
+      }
+      
+      /* 侧边栏模式最小宽度 */
+      @media (min-width: 300px) {
+        body {
+          min-width: 360px;
+        }
+      }
+      
+      /* 暗色模式支持 */
+      @media (prefers-color-scheme: dark) {
+        html {
+          color-scheme: dark;
+        }
+      }
+    </style>
+  </head>
+  <body class="dark:bg-gray-900">
+    <div id="root"></div>
+    <script type="module" src="/src/main.extension.tsx"></script>
+  </body>
+</html>

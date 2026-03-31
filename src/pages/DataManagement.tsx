@@ -25,6 +25,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
     Download,
@@ -41,11 +43,13 @@ import {
     Tags,
     FileCode,
     Settings,
+    Lock,
 } from "lucide-react";
 import {
     exportAllData,
     downloadExportFile,
     exportTableData,
+    exportEncryptedTableData,
     exportToCSV,
     exportArticlesToMarkdown,
     exportTopicsToText,
@@ -60,8 +64,11 @@ import {
     type ExportData,
 } from "@/db/dataExport";
 import { db } from "@/db/database";
+import { useAuth } from "@/context/LocalAuthProvider";
+import { hasEncryptionKey } from "@/db/encryptedDatabase";
 
 export default function DataManagement() {
+    const { user, isDecrypted } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [loading, setLoading] = useState(true);
     const [exporting, setExporting] = useState(false);
@@ -69,6 +76,7 @@ export default function DataManagement() {
     const [stats, setStats] = useState<Record<string, number>>({});
     const [showImportDialog, setShowImportDialog] = useState(false);
     const [pendingImportData, setPendingImportData] = useState<ExportData | null>(null);
+    const [encryptExport, setEncryptExport] = useState(true); // 默认加密导出
 
     useEffect(() => {
         loadStats();
@@ -87,31 +95,49 @@ export default function DataManagement() {
     };
 
     const handleExport = async () => {
+        if (!user?.id) {
+            toast.error("请先登录");
+            return;
+        }
+
+        // 如果选择加密导出，检查是否已解密
+        if (encryptExport && (!isDecrypted || !hasEncryptionKey())) {
+            toast.error("数据未解密，请重新登录后再导出加密数据");
+            return;
+        }
+
         try {
             setExporting(true);
-            const data = await exportAllData();
+            const data = await exportAllData(user.id, encryptExport);
             downloadExportFile(data);
-            toast.success("数据导出成功");
+            toast.success(data.encrypted ? "加密数据导出成功" : "数据导出成功");
         } catch (error) {
-            toast.error("导出失败");
+            toast.error("导出失败: " + (error instanceof Error ? error.message : '未知错误'));
             console.error(error);
         } finally {
             setExporting(false);
         }
     };
 
-    const handleExportTable = async (tableName: string, format: 'json' | 'csv') => {
+    const handleExportTable = async (tableName: string, format: 'json' | 'csv', encrypted: boolean = false) => {
         try {
             setExporting(true);
-            const data = await exportTableData(tableName);
 
-            if (format === 'csv') {
-                exportToCSV(data.data, tableName);
-            } else {
+            if (encrypted) {
+                // 加密导出
+                const data = await exportEncryptedTableData(tableName, user?.id);
                 downloadExportFile(data);
+                toast.success(`${TABLE_NAMES[tableName] || tableName} 加密导出成功`);
+            } else {
+                // 明文导出
+                const data = await exportTableData(tableName, user?.id);
+                if (format === 'csv') {
+                    exportToCSV(data.data, tableName);
+                } else {
+                    downloadExportFile(data);
+                }
+                toast.success(`${TABLE_NAMES[tableName] || tableName} 导出成功`);
             }
-
-            toast.success(`${TABLE_NAMES[tableName] || tableName} 导出成功`);
         } catch (error) {
             const message = error instanceof Error ? error.message : '导出失败';
             toast.error(message);
@@ -123,7 +149,7 @@ export default function DataManagement() {
     const handleExportArticlesMarkdown = async () => {
         try {
             setExporting(true);
-            const articles = await db.articles.toArray();
+            const { data: articles } = await exportTableData('articles', user?.id);
             exportArticlesToMarkdown(articles);
             toast.success("文章导出为 Markdown 成功");
         } catch (error) {
@@ -137,7 +163,7 @@ export default function DataManagement() {
     const handleExportTopicsText = async () => {
         try {
             setExporting(true);
-            const topics = await db.topics.toArray();
+            const { data: topics } = await exportTableData('topics', user?.id);
             exportTopicsToText(topics);
             toast.success("主题导出成功");
         } catch (error) {
@@ -151,7 +177,7 @@ export default function DataManagement() {
     const handleExportKeywordsText = async () => {
         try {
             setExporting(true);
-            const keywords = await db.keywords.toArray();
+            const { data: keywords } = await exportTableData('keywords', user?.id);
             exportKeywordsToText(keywords);
             toast.success("关键词导出成功");
         } catch (error) {
@@ -172,10 +198,10 @@ export default function DataManagement() {
 
         try {
             const data = await readImportFile(file);
-            const validation = validateImportData(data);
+            const isValid = validateImportData(data);
 
-            if (!validation.valid) {
-                toast.error(validation.error || "无效的备份文件");
+            if (!isValid) {
+                toast.error("无效的备份文件格式");
                 return;
             }
 
@@ -194,22 +220,26 @@ export default function DataManagement() {
 
     const handleConfirmImport = async () => {
         if (!pendingImportData) return;
+        if (!user?.id) {
+            toast.error("请先登录");
+            return;
+        }
 
         try {
             setImporting(true);
             setShowImportDialog(false);
 
-            const result = await importData(pendingImportData, { clearExisting: true });
+            const result = await importData(pendingImportData, user.id, { overwrite: true });
 
             if (result.success) {
-                const items = Object.entries(result.stats)
-                    .filter(([_, count]) => count > 0)
-                    .map(([key, count]) => `${count} ${TABLE_NAMES[key] || key}`)
-                    .join(', ');
-                toast.success(`导入成功: ${items}`);
+                if (pendingImportData.encrypted) {
+                    toast.success("加密数据导入成功");
+                } else {
+                    toast.success(`导入成功: ${result.imported} 条数据`);
+                }
                 await loadStats();
             } else {
-                toast.error(result.message);
+                toast.error(result.errors.join(', '));
             }
         } catch (error) {
             toast.error("导入失败");
@@ -268,6 +298,22 @@ export default function DataManagement() {
                     )}
 
                     <div className="space-y-3">
+                        {/* 加密选项开关 */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                            <div className="flex items-center gap-2">
+                                <Lock className="h-4 w-4 text-muted-foreground" />
+                                <Label htmlFor="encrypt-export" className="text-sm cursor-pointer">
+                                    加密导出
+                                </Label>
+                            </div>
+                            <Switch
+                                id="encrypt-export"
+                                checked={encryptExport}
+                                onCheckedChange={setEncryptExport}
+                                disabled={!isDecrypted}
+                            />
+                        </div>
+
                         {/* 完整备份 */}
                         <Button
                             onClick={handleExport}
@@ -283,7 +329,7 @@ export default function DataManagement() {
                             ) : (
                                 <>
                                     <Download className="mr-2 h-4 w-4" />
-                                    导出完整备份 (JSON)
+                                    {encryptExport ? '导出加密完整备份' : '导出完整备份 (JSON)'}
                                 </>
                             )}
                         </Button>
@@ -314,6 +360,15 @@ export default function DataManagement() {
                                         <FileText className="mr-2 h-4 w-4" />
                                         Markdown 格式
                                     </DropdownMenuItem>
+                                    {isDecrypted && (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem onClick={() => handleExportTable('articles', 'json', true)}>
+                                                <Lock className="mr-2 h-4 w-4" />
+                                                加密 JSON 格式
+                                            </DropdownMenuItem>
+                                        </>
+                                    )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
 

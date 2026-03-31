@@ -1,9 +1,12 @@
 import { db } from './database';
+import { exportEncryptedData, importEncryptedData } from './encryptedApi';
+import { hasEncryptionKey } from './encryptedDatabase';
 
 // 导出数据结构
 export interface ExportData {
     version: string;
     exportedAt: string;
+    encrypted: boolean;
     data: {
         users: any[];
         wordpress_sites: any[];
@@ -12,7 +15,7 @@ export interface ExportData {
         article_templates: any[];
         keywords: any[];
         topics: any[];
-    };
+    } | Record<string, unknown>; // 加密数据时存储为 Record
 }
 
 // 单独导出结构
@@ -20,11 +23,27 @@ export interface SingleExportData {
     type: string;
     exportedAt: string;
     count: number;
+    encrypted: boolean;
     data: any[];
 }
 
 // 导出所有数据
-export async function exportAllData(): Promise<ExportData> {
+export async function exportAllData(
+    userId?: string,
+    encrypt: boolean = true
+): Promise<ExportData> {
+    // 如果用户选择加密导出且已登录解密
+    if (encrypt && userId && hasEncryptionKey()) {
+        const encryptedData = await exportEncryptedData(userId);
+        return {
+            version: '3.0.0',
+            exportedAt: new Date().toISOString(),
+            encrypted: true,
+            data: encryptedData.data,
+        };
+    }
+
+    // 导出未加密数据（向后兼容或用户选择不加密）
     const [users, wordpress_sites, articles, ai_settings, article_templates, keywords, topics] = await Promise.all([
         db.users.toArray(),
         db.wordpress_sites.toArray(),
@@ -36,8 +55,9 @@ export async function exportAllData(): Promise<ExportData> {
     ]);
 
     return {
-        version: '2.0.0',
+        version: '3.0.0',
         exportedAt: new Date().toISOString(),
+        encrypted: false,
         data: {
             users,
             wordpress_sites,
@@ -50,10 +70,48 @@ export async function exportAllData(): Promise<ExportData> {
     };
 }
 
-// 导出单个表数据
-export async function exportTableData(tableName: string): Promise<SingleExportData> {
-    let data: any[] = [];
+// 导出单个表数据（明文，便于查看）
+export async function exportTableData(tableName: string, userId?: string): Promise<SingleExportData> {
+    // 如果用户已登录且已解密，从加密存储获取
+    if (userId && hasEncryptionKey()) {
+        const { getEncryptedArticles, getEncryptedSites, getEncryptedTemplates, getEncryptedKeywords, getEncryptedTopics, getEncryptedAISettings } = await import('./encryptedDatabase');
 
+        let data: any[] = [];
+        switch (tableName) {
+            case 'articles':
+                data = await getEncryptedArticles(userId);
+                break;
+            case 'wordpress_sites':
+                data = await getEncryptedSites(userId);
+                break;
+            case 'article_templates':
+                data = await getEncryptedTemplates(userId);
+                break;
+            case 'keywords':
+                data = await getEncryptedKeywords(userId);
+                break;
+            case 'topics':
+                data = await getEncryptedTopics(userId);
+                break;
+            case 'ai_settings':
+                const settings = await getEncryptedAISettings(userId);
+                data = settings ? [settings] : [];
+                break;
+            default:
+                throw new Error(`不支持的表: ${tableName}`);
+        }
+
+        return {
+            type: tableName,
+            exportedAt: new Date().toISOString(),
+            count: data.length,
+            encrypted: false, // 单个表导出为明文（便于查看）
+            data,
+        };
+    }
+
+    // 否则从旧数据库获取（向后兼容）
+    let data: any[] = [];
     switch (tableName) {
         case 'articles':
             data = await db.articles.toArray();
@@ -81,7 +139,57 @@ export async function exportTableData(tableName: string): Promise<SingleExportDa
         type: tableName,
         exportedAt: new Date().toISOString(),
         count: data.length,
+        encrypted: false,
         data,
+    };
+}
+
+// 加密导出单个表数据
+export async function exportEncryptedTableData(
+    tableName: string,
+    userId?: string
+): Promise<ExportData> {
+    if (!userId || !hasEncryptionKey()) {
+        throw new Error('未登录或数据未解密，无法导出加密数据');
+    }
+
+    const { getEncryptedArticles, getEncryptedSites, getEncryptedTemplates, getEncryptedKeywords, getEncryptedTopics, getEncryptedAISettings } = await import('./encryptedDatabase');
+
+    let data: any[] = [];
+    switch (tableName) {
+        case 'articles':
+            data = await getEncryptedArticles(userId);
+            break;
+        case 'wordpress_sites':
+            data = await getEncryptedSites(userId);
+            break;
+        case 'article_templates':
+            data = await getEncryptedTemplates(userId);
+            break;
+        case 'keywords':
+            data = await getEncryptedKeywords(userId);
+            break;
+        case 'topics':
+            data = await getEncryptedTopics(userId);
+            break;
+        case 'ai_settings':
+            const settings = await getEncryptedAISettings(userId);
+            data = settings ? [settings] : [];
+            break;
+        default:
+            throw new Error(`不支持的表: ${tableName}`);
+    }
+
+    // 使用加密格式导出
+    const encryptedPayload = {
+        [tableName]: data,
+    };
+
+    return {
+        version: '3.0.0',
+        exportedAt: new Date().toISOString(),
+        encrypted: true,
+        data: encryptedPayload,
     };
 }
 
@@ -326,8 +434,18 @@ ${article.content || ''}
 }
 
 // 导出 AI 设置（包含生图 API 配置）
-export async function exportAISettingsToJSON(): Promise<void> {
-    const ai_settings = await db.ai_settings.toArray();
+export async function exportAISettingsToJSON(userId?: string): Promise<void> {
+    let ai_settings: any[] = [];
+
+    if (userId && hasEncryptionKey()) {
+        const { getEncryptedAISettings } = await import('./encryptedDatabase');
+        const settings = await getEncryptedAISettings(userId);
+        if (settings) {
+            ai_settings = [settings];
+        }
+    } else {
+        ai_settings = await db.ai_settings.toArray();
+    }
 
     // 过滤敏感信息，只保留部分 API key 用于参考
     const safeSettings = ai_settings.map(setting => ({
@@ -357,187 +475,261 @@ export async function exportAISettingsToJSON(): Promise<void> {
     URL.revokeObjectURL(url);
 }
 
-// 导出 AI 设置为可导入格式（完整 API Key - 谨慎使用）
-export async function exportAISettingsFull(): Promise<void> {
-    const ai_settings = await db.ai_settings.toArray();
-
-    const exportData = {
-        type: 'ai_settings_full',
-        version: '2.0.0',
-        exportedAt: new Date().toISOString(),
-        count: ai_settings.length,
-        warning: '此导出包含完整的 API Key，请妥善保管！',
-        data: ai_settings,
-    };
-
-    const json = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ai-settings-full-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// 验证导入数据格式
-export function validateImportData(data: any): { valid: boolean; error?: string } {
-    if (!data || typeof data !== 'object') {
-        return { valid: false, error: '无效的数据格式' };
+// 导出完整 AI 设置（包含完整 API key，谨慎使用）
+export async function exportAISettingsFull(userId?: string): Promise<object> {
+    if (userId && hasEncryptionKey()) {
+        const { getEncryptedAISettings } = await import('./encryptedDatabase');
+        const settings = await getEncryptedAISettings(userId);
+        return settings || {};
     }
-
-    if (!data.version) {
-        return { valid: false, error: '缺少版本信息' };
-    }
-
-    if (!data.data) {
-        return { valid: false, error: '缺少数据内容' };
-    }
-
-    // v1.0.0 必需的表
-    const requiredTables = ['users', 'wordpress_sites', 'articles', 'ai_settings'];
-    for (const table of requiredTables) {
-        if (!Array.isArray(data.data[table])) {
-            return { valid: false, error: `缺少或无效的表: ${table}` };
-        }
-    }
-
-    return { valid: true };
-}
-
-// 导入数据（覆盖模式）
-export async function importData(
-    data: ExportData,
-    options: { clearExisting: boolean } = { clearExisting: true }
-): Promise<{ success: boolean; message: string; stats: Record<string, number> }> {
-    try {
-        const stats: Record<string, number> = {};
-
-        if (options.clearExisting) {
-            // 清除现有数据
-            await Promise.all([
-                db.users.clear(),
-                db.wordpress_sites.clear(),
-                db.articles.clear(),
-                db.ai_settings.clear(),
-                db.article_templates.clear(),
-                db.keywords.clear(),
-                db.topics.clear(),
-            ]);
-        }
-
-        // 导入用户
-        if (data.data.users?.length > 0) {
-            await db.users.bulkPut(data.data.users);
-            stats.users = data.data.users.length;
-        }
-
-        // 导入站点
-        if (data.data.wordpress_sites?.length > 0) {
-            await db.wordpress_sites.bulkPut(data.data.wordpress_sites);
-            stats.wordpress_sites = data.data.wordpress_sites.length;
-        }
-
-        // 导入文章
-        if (data.data.articles?.length > 0) {
-            await db.articles.bulkPut(data.data.articles);
-            stats.articles = data.data.articles.length;
-        }
-
-        // 导入 AI 设置
-        if (data.data.ai_settings?.length > 0) {
-            await db.ai_settings.bulkPut(data.data.ai_settings);
-            stats.ai_settings = data.data.ai_settings.length;
-        }
-
-        // 导入模板 (v2.0.0+)
-        if (data.data.article_templates?.length > 0) {
-            await db.article_templates.bulkPut(data.data.article_templates);
-            stats.article_templates = data.data.article_templates.length;
-        }
-
-        // 导入关键词 (v2.0.0+)
-        if (data.data.keywords?.length > 0) {
-            await db.keywords.bulkPut(data.data.keywords);
-            stats.keywords = data.data.keywords.length;
-        }
-
-        // 导入主题 (v2.0.0+)
-        if (data.data.topics?.length > 0) {
-            await db.topics.bulkPut(data.data.topics);
-            stats.topics = data.data.topics.length;
-        }
-
-        return {
-            success: true,
-            message: '数据导入成功',
-            stats,
-        };
-    } catch (error) {
-        return {
-            success: false,
-            message: error instanceof Error ? error.message : '导入失败',
-            stats: {},
-        };
-    }
+    const settings = await db.ai_settings.toArray();
+    return settings[0] || {};
 }
 
 // 读取导入文件
 export function readImportFile(file: File): Promise<ExportData> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-
         reader.onload = (e) => {
             try {
-                const content = e.target?.result as string;
-                const data = JSON.parse(content);
+                const data = JSON.parse(e.target?.result as string);
                 resolve(data);
             } catch (error) {
-                reject(new Error('无法解析文件内容'));
+                reject(new Error('文件格式错误，无法解析 JSON'));
             }
         };
-
-        reader.onerror = () => {
-            reject(new Error('读取文件失败'));
-        };
-
+        reader.onerror = () => reject(new Error('读取文件失败'));
         reader.readAsText(file);
     });
 }
 
+// 验证导入数据
+export function validateImportData(data: unknown): data is ExportData {
+    if (typeof data !== 'object' || data === null) {
+        return false;
+    }
+
+    const exportData = data as ExportData;
+
+    // 检查必要字段
+    if (!exportData.version || !exportData.exportedAt) {
+        return false;
+    }
+
+    // 检查是否为加密数据
+    if (exportData.encrypted && exportData.data) {
+        return true;
+    }
+
+    // 检查未加密数据的结构
+    if (!exportData.data || typeof exportData.data !== 'object') {
+        return false;
+    }
+
+    return true;
+}
+
+// 导入数据
+export async function importData(
+    data: ExportData,
+    userId?: string,
+    options: { merge?: boolean; overwrite?: boolean } = {}
+): Promise<{ success: boolean; imported: number; errors: string[] }> {
+    const errors: string[] = [];
+    let imported = 0;
+
+    try {
+        // 如果是加密数据且用户已登录
+        if (data.encrypted && userId && hasEncryptionKey()) {
+            await importEncryptedData(userId, {
+                version: 1,
+                timestamp: data.exportedAt,
+                data: data.data as Record<string, unknown>,
+            });
+            return { success: true, imported: 1, errors: [] };
+        }
+
+        // 否则按未加密数据处理（向后兼容）
+        const { merge = true, overwrite = false } = options;
+        const plainData = data.data as ExportData['data'];
+
+        // 导入文章
+        if (plainData.articles?.length) {
+            for (const article of plainData.articles) {
+                try {
+                    if (overwrite) {
+                        await db.articles.put(article);
+                    } else if (merge) {
+                        const existing = await db.articles.get(article.id);
+                        if (!existing) {
+                            await db.articles.add(article);
+                            imported++;
+                        }
+                    } else {
+                        await db.articles.add(article);
+                        imported++;
+                    }
+                } catch (error) {
+                    errors.push(`文章 "${article.title}" 导入失败`);
+                }
+            }
+        }
+
+        // 导入站点
+        if (plainData.wordpress_sites?.length) {
+            for (const site of plainData.wordpress_sites) {
+                try {
+                    if (overwrite) {
+                        await db.wordpress_sites.put(site);
+                    } else if (merge) {
+                        const existing = await db.wordpress_sites.get(site.id);
+                        if (!existing) {
+                            await db.wordpress_sites.add(site);
+                            imported++;
+                        }
+                    } else {
+                        await db.wordpress_sites.add(site);
+                        imported++;
+                    }
+                } catch (error) {
+                    errors.push(`站点 "${site.site_name}" 导入失败`);
+                }
+            }
+        }
+
+        // 导入模板
+        if (plainData.article_templates?.length) {
+            for (const template of plainData.article_templates) {
+                try {
+                    if (overwrite) {
+                        await db.article_templates.put(template);
+                    } else if (merge) {
+                        const existing = await db.article_templates.get(template.id);
+                        if (!existing) {
+                            await db.article_templates.add(template);
+                            imported++;
+                        }
+                    } else {
+                        await db.article_templates.add(template);
+                        imported++;
+                    }
+                } catch (error) {
+                    errors.push(`模板 "${template.name}" 导入失败`);
+                }
+            }
+        }
+
+        // 导入关键词
+        if (plainData.keywords?.length) {
+            for (const keyword of plainData.keywords) {
+                try {
+                    if (overwrite) {
+                        await db.keywords.put(keyword);
+                    } else if (merge) {
+                        const existing = await db.keywords.get(keyword.id);
+                        if (!existing) {
+                            await db.keywords.add(keyword);
+                            imported++;
+                        }
+                    } else {
+                        await db.keywords.add(keyword);
+                        imported++;
+                    }
+                } catch (error) {
+                    errors.push(`关键词 "${keyword.keyword}" 导入失败`);
+                }
+            }
+        }
+
+        // 导入主题
+        if (plainData.topics?.length) {
+            for (const topic of plainData.topics) {
+                try {
+                    if (overwrite) {
+                        await db.topics.put(topic);
+                    } else if (merge) {
+                        const existing = await db.topics.get(topic.id);
+                        if (!existing) {
+                            await db.topics.add(topic);
+                            imported++;
+                        }
+                    } else {
+                        await db.topics.add(topic);
+                        imported++;
+                    }
+                } catch (error) {
+                    errors.push(`主题 "${topic.title}" 导入失败`);
+                }
+            }
+        }
+
+        // 导入 AI 设置
+        if (plainData.ai_settings?.length) {
+            for (const setting of plainData.ai_settings) {
+                try {
+                    if (overwrite) {
+                        await db.ai_settings.put(setting);
+                    } else if (merge) {
+                        const existing = await db.ai_settings.get(setting.id);
+                        if (!existing) {
+                            await db.ai_settings.add(setting);
+                            imported++;
+                        }
+                    } else {
+                        await db.ai_settings.add(setting);
+                        imported++;
+                    }
+                } catch (error) {
+                    errors.push('AI 设置导入失败');
+                }
+            }
+        }
+
+        return { success: true, imported, errors };
+    } catch (error) {
+        return {
+            success: false,
+            imported,
+            errors: [...errors, (error as Error).message],
+        };
+    }
+}
+
 // 获取数据统计
 export async function getDataStats(): Promise<Record<string, number>> {
-    const [users, sites, articles, settings, templates, keywords, topics] = await Promise.all([
-        db.users.count(),
-        db.wordpress_sites.count(),
+    const [articles, sites, templates, keywords, topics, aiSettings] = await Promise.all([
         db.articles.count(),
-        db.ai_settings.count(),
+        db.wordpress_sites.count(),
         db.article_templates.count(),
         db.keywords.count(),
         db.topics.count(),
+        db.ai_settings.count(),
     ]);
 
     return {
-        users,
-        wordpress_sites: sites,
         articles,
-        ai_settings: settings,
+        wordpress_sites: sites,
         article_templates: templates,
         keywords,
         topics,
+        ai_settings: aiSettings,
     };
 }
 
-// 获取用于显示的表名映射
+// 表名映射
 export const TABLE_NAMES: Record<string, string> = {
-    users: '用户',
-    wordpress_sites: '站点',
     articles: '文章',
-    ai_settings: 'AI 设置',
-    article_templates: '模板',
+    wordpress_sites: 'WordPress 站点',
+    article_templates: '文章模板',
     keywords: '关键词',
     topics: '主题',
+    ai_settings: 'AI 设置',
 };
+
+// 支持的导出格式
+export const EXPORT_FORMATS = [
+    { value: 'json', label: 'JSON (完整数据)' },
+    { value: 'csv', label: 'CSV (表格数据)' },
+    { value: 'markdown', label: 'Markdown (文章)' },
+    { value: 'txt', label: '文本 (关键词/主题)' },
+] as const;

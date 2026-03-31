@@ -1,16 +1,22 @@
+import { lazy, type ReactNode, Suspense } from "react";
+import { DashboardSkeleton, ListPageSkeleton, PageSkeleton } from "@/components/common/PageSkeleton";
+
+// 同步加载核心页面
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Sites from "./pages/Sites";
-import Articles from "./pages/Articles";
-import ArticleEditor from "./pages/ArticleEditor";
-import Admin from "./pages/Admin";
-import AISettings from "./pages/AISettings";
-import DataManagement from "./pages/DataManagement";
-import Templates from "./pages/Templates";
-import Keywords from "./pages/Keywords";
-import Topics from "./pages/Topics";
-import type { ReactNode } from "react";
+
+// 懒加载其他页面
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Sites = lazy(() => import("./pages/Sites"));
+const Articles = lazy(() => import("./pages/Articles"));
+const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
+const Admin = lazy(() => import("./pages/Admin"));
+const AISettings = lazy(() => import("./pages/AISettings"));
+const DataManagement = lazy(() => import("./pages/DataManagement"));
+const Templates = lazy(() => import("./pages/Templates"));
+const Keywords = lazy(() => import("./pages/Keywords"));
+const Topics = lazy(() => import("./pages/Topics"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 export interface RouteConfig {
   name: string;
@@ -18,6 +24,18 @@ export interface RouteConfig {
   element: ReactNode;
   visible?: boolean;
   requireAuth?: boolean;
+}
+
+// 包装懒加载组件，添加骨架屏
+function withSuspense(
+  Component: React.LazyExoticComponent<React.ComponentType>,
+  fallback: ReactNode
+) {
+  return (
+    <Suspense fallback={fallback}>
+      <Component />
+    </Suspense>
+  );
 }
 
 const routes: RouteConfig[] = [
@@ -38,72 +56,79 @@ const routes: RouteConfig[] = [
   {
     name: "仪表板",
     path: "/dashboard",
-    element: <Dashboard />,
+    element: withSuspense(Dashboard, <DashboardSkeleton />),
     visible: true,
     requireAuth: true,
   },
   {
     name: "站点管理",
     path: "/sites",
-    element: <Sites />,
+    element: withSuspense(Sites, <ListPageSkeleton />),
     visible: true,
     requireAuth: true,
   },
   {
     name: "文章管理",
     path: "/articles",
-    element: <Articles />,
+    element: withSuspense(Articles, <ListPageSkeleton />),
     visible: true,
     requireAuth: true,
   },
   {
     name: "文章编辑",
     path: "/articles/:id",
-    element: <ArticleEditor />,
+    element: withSuspense(ArticleEditor, <PageSkeleton />),
     visible: false,
     requireAuth: true,
   },
   {
     name: "主题库",
     path: "/topics",
-    element: <Topics />,
+    element: withSuspense(Topics, <ListPageSkeleton />),
     visible: true,
     requireAuth: true,
   },
   {
     name: "模板库",
     path: "/templates",
-    element: <Templates />,
+    element: withSuspense(Templates, <ListPageSkeleton />),
     visible: true,
     requireAuth: true,
   },
   {
     name: "关键词库",
     path: "/keywords",
-    element: <Keywords />,
+    element: withSuspense(Keywords, <ListPageSkeleton />),
     visible: true,
     requireAuth: true,
   },
   {
     name: "AI 设置",
     path: "/ai-settings",
-    element: <AISettings />,
+    element: withSuspense(AISettings, <PageSkeleton />),
     visible: true,
     requireAuth: true,
   },
   {
     name: "数据管理",
     path: "/data",
-    element: <DataManagement />,
+    element: withSuspense(DataManagement, <PageSkeleton />),
     visible: true,
     requireAuth: true,
   },
   {
     name: "管理员",
     path: "/admin",
-    element: <Admin />,
+    element: withSuspense(Admin, <PageSkeleton />),
     visible: true,
     requireAuth: true,
+  },
+  {
+    name: "404",
+    path: "*",
+    element: withSuspense(NotFound, <PageSkeleton />),
+    visible: false,
+    requireAuth: false,
   },
 ];
 

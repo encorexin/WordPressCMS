@@ -27,3 +27,7 @@ package-lock.json
 .sync
 history/*.json
 .vite_cache
+
+# 扩展构建输出
+extension-build/
+extension/icons/*.svg

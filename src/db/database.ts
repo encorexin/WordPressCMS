@@ -91,6 +91,19 @@ export interface Topic {
     created_at: string;
 }
 
+// 文章版本类型
+export interface ArticleVersion {
+    id: string;
+    article_id: string;
+    user_id: string;
+    title: string;
+    content: string | null;
+    keywords: string | null;
+    template: string | null;
+    version_number: number;
+    created_at: string;
+}
+
 // 创建 Dexie 数据库
 const db = new Dexie('WordPressCMS') as Dexie & {
     users: EntityTable<LocalUser, 'id'>;
@@ -100,17 +113,19 @@ const db = new Dexie('WordPressCMS') as Dexie & {
     article_templates: EntityTable<ArticleTemplate, 'id'>;
     keywords: EntityTable<Keyword, 'id'>;
     topics: EntityTable<Topic, 'id'>;
+    article_versions: EntityTable<ArticleVersion, 'id'>;
 };
 
 // 定义数据库版本和表结构
-db.version(5).stores({
+db.version(6).stores({
     users: 'id, email, role, created_at',
     wordpress_sites: 'id, user_id, site_name, status, created_at',
     articles: 'id, user_id, site_id, title, status, created_at',
     ai_settings: 'id, user_id',
     article_templates: 'id, user_id, name, created_at',
     keywords: 'id, user_id, keyword, group_name, use_count',
-    topics: 'id, user_id, title, category, used, created_at'
+    topics: 'id, user_id, title, category, used, created_at',
+    article_versions: 'id, article_id, user_id, version_number, created_at'
 });
 
 export { db };

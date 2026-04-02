@@ -42,3 +42,12 @@ harmonyos/**/.cxx/
 harmonyos/**/.test/
 *.hap
 *.app
+
+# Android 签名密钥 (敏感信息)
+android/keystore.properties
+android/app/*.keystore
+android/local.properties
+
+# HarmonyOS 签名配置 (敏感信息)
+harmonyos/build-profile.json5
+harmonyos/local.properties

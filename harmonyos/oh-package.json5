@@ -1,0 +1,10 @@
+{
+  "modelVersion": "6.0.2",
+  "name": "wpcms",
+  "version": "1.0.0",
+  "description": "WordPress CMS HarmonyOS Application",
+  "main": "",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}

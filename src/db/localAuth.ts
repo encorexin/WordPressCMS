@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { db, generateId, getTimestamp, type LocalUser } from './database';
+import { authLogger } from '@/utils/logger';
 export type { LocalUser } from './database';
 
 // Session key in localStorage
@@ -61,7 +62,7 @@ export async function register(email: string, password: string): Promise<{ user:
 
         return { user: newUser, error: null };
     } catch (error) {
-        console.error('注册失败:', error);
+        authLogger.error('注册失败:', error);
         return { user: null, error: '注册失败，请重试' };
     }
 }
@@ -86,7 +87,7 @@ export async function login(email: string, password: string): Promise<{ user: Lo
 
         return { user, error: null };
     } catch (error) {
-        console.error('登录失败:', error);
+        authLogger.error('登录失败:', error);
         return { user: null, error: '登录失败，请重试' };
     }
 }
@@ -131,13 +132,10 @@ export async function refreshSession(): Promise<LocalUser | null> {
             }
         }
 
-        // 数据库中确实没有该用户，但保留会话信息
-        // 这样用户不会突然被踢出，除非明确无法验证
-        console.warn('用户在数据库中未找到，保留当前会话');
+        authLogger.warn('用户在数据库中未找到，保留当前会话');
         return currentUser;
     } catch (error) {
-        // 数据库访问出错，保留当前会话而不是踢出用户
-        console.error('刷新会话时出错:', error);
+        authLogger.error('刷新会话时出错:', error);
         return currentUser;
     }
 }

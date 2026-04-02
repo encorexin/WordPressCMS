@@ -41,6 +41,8 @@ export interface LocalArticle {
 export interface AISettings {
     id: string;
     user_id: string;
+    name: string;           // 配置名称
+    is_default: boolean;    // 是否为默认配置
     api_endpoint: string;
     api_key: string;
     model: string;
@@ -117,11 +119,11 @@ const db = new Dexie('WordPressCMS') as Dexie & {
 };
 
 // 定义数据库版本和表结构
-db.version(6).stores({
+db.version(7).stores({
     users: 'id, email, role, created_at',
     wordpress_sites: 'id, user_id, site_name, status, created_at',
     articles: 'id, user_id, site_id, title, status, created_at',
-    ai_settings: 'id, user_id',
+    ai_settings: 'id, user_id, name, is_default',
     article_templates: 'id, user_id, name, created_at',
     keywords: 'id, user_id, keyword, group_name, use_count',
     topics: 'id, user_id, title, category, used, created_at',

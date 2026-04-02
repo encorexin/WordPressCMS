@@ -19,6 +19,7 @@ import type { Profile } from "@/types/types";
 import routes from "../../routes";
 import { GlobalSearch } from "./GlobalSearch";
 import { HotkeyHelp } from "./HotkeyHelp";
+import { logger } from "@/utils/logger";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -48,7 +49,7 @@ const Header = () => {
         setProfile(data);
       }
     } catch (error) {
-      console.error("加载用户信息失败:", error);
+      logger.error("加载用户信息失败:", error);
     }
   };
 

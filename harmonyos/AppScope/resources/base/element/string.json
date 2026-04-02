@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "WordPress CMS"
+    },
+    {
+      "name": "MainAbility_label",
+      "value": "WordPress CMS"
+    },
+    {
+      "name": "MainAbility_desc",
+      "value": "AI驱动的WordPress内容管理工具"
+    }
+  ]
+}

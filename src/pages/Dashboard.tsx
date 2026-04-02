@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/context/LocalAuthProvider";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { getStatistics } from "@/db/api";
-import { FileText, Globe, CheckCircle, FileEdit, Plus, ArrowRight, Sparkles } from "lucide-react";
+import { FileText, Globe, CheckCircle, FileEdit, Plus, ArrowRight, Sparkles, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
+import { logger } from "@/utils/logger";
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, isDecrypted, logout } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalSites: 0,
@@ -16,21 +19,28 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadStatistics();
-  }, [user]);
+  const loadStatistics = useCallback(async () => {
+    if (!user?.id || !isDecrypted) return;
 
-  const loadStatistics = async () => {
     try {
       setLoading(true);
-      const data = await getStatistics(user?.id);
+      const data = await getStatistics(user.id);
       setStats(data);
     } catch (error) {
-      console.error("加载统计数据失败:", error);
+      logger.error("加载统计数据失败:", error);
+      toast.error("加载统计数据失败");
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, isDecrypted]);
+
+  useEffect(() => {
+    if (isDecrypted) {
+      loadStatistics();
+    } else {
+      setLoading(false);
+    }
+  }, [loadStatistics, isDecrypted]);
 
   const statCards = [
     {
@@ -98,6 +108,36 @@ export default function Dashboard() {
             查看您的内容管理概览，开始创作精彩内容
           </p>
         </div>
+
+        {/* 数据未解密提示 */}
+        {!isDecrypted && (
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 backdrop-blur-sm">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-900/50">
+                  <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base sm:text-lg font-semibold text-amber-800 dark:text-amber-200">
+                    需要重新登录
+                  </h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    您的会话已过期，请重新登录以访问您的数据
+                  </p>
+                </div>
+                <Button
+                  onClick={() => {
+                    logout();
+                    navigate("/login");
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  重新登录
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* 统计卡片 */}
         {loading ? (

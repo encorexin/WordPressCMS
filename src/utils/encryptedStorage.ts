@@ -4,6 +4,7 @@
  */
 
 import { encryptData, decryptData, isEncryptedData, type EncryptedData } from './crypto';
+import { storageLogger } from './logger';
 
 // 存储键名
 const STORAGE_KEYS = {
@@ -90,7 +91,7 @@ export async function setEncryptionKey(userId: string, password: string): Promis
         const encryptedPassword = await encryptPassword(password);
         localStorage.setItem(STORAGE_KEYS.SESSION_KEY + userId, encryptedPassword);
     } catch (error) {
-        console.error('保存会话密钥失败:', error);
+        storageLogger.error('保存会话密钥失败:', error);
     }
 }
 
@@ -118,7 +119,7 @@ export async function restoreEncryptionKey(userId: string): Promise<boolean> {
         cachedPassword = password;
         return true;
     } catch (error) {
-        console.error('恢复会话密钥失败:', error);
+        storageLogger.error('恢复会话密钥失败:', error);
         return false;
     }
 }
@@ -168,9 +169,9 @@ export async function saveEncryptedData<T>(
 
     // 存储加密数据
     const storageKey = getStorageKey(userId, dataType);
-    console.log('SaveEncryptedData debug - saving to key:', storageKey, 'data length:', jsonData.length);
+    storageLogger.debug('保存加密数据:', { key: storageKey, length: jsonData.length });
     localStorage.setItem(storageKey, JSON.stringify(encrypted));
-    console.log('SaveEncryptedData debug - saved successfully');
+    storageLogger.debug('数据保存成功');
 
     // 标记加密已启用
     localStorage.setItem(STORAGE_KEYS.ENCRYPTION_ENABLED, 'true');
@@ -214,7 +215,7 @@ export async function loadEncryptedData<T>(
 
         return JSON.parse(decrypted) as T;
     } catch (error) {
-        console.error(`加载加密数据失败 (${dataType}):`, error);
+        storageLogger.error(`加载加密数据失败 (${dataType}):`, error);
         return null;
     }
 }
@@ -247,17 +248,14 @@ export async function exportEncryptedData(userId: string): Promise<{
     const exported: Record<string, EncryptedData | unknown> = {};
     const prefix = STORAGE_KEYS.USER_DATA_PREFIX + userId;
 
-    console.log('ExportEncryptedData debug - looking for keys with prefix:', prefix);
-    console.log('ExportEncryptedData debug - localStorage length:', localStorage.length);
+    storageLogger.debug('导出加密数据，前缀:', prefix);
 
-    // 遍历所有该用户的数据
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        console.log('ExportEncryptedData debug - checking key:', key);
         if (key && key.startsWith(prefix)) {
             const dataType = key.replace(prefix + '_', '');
             const stored = localStorage.getItem(key);
-            console.log('ExportEncryptedData debug - found dataType:', dataType, 'stored:', stored?.substring(0, 50));
+            storageLogger.debug('找到数据类型:', dataType);
             if (stored) {
                 try {
                     exported[dataType] = JSON.parse(stored);
@@ -268,7 +266,7 @@ export async function exportEncryptedData(userId: string): Promise<{
         }
     }
 
-    console.log('ExportEncryptedData debug - exported:', exported);
+    storageLogger.debug('导出完成，数据类型数量:', Object.keys(exported).length);
 
     return {
         version: CURRENT_DATA_VERSION,

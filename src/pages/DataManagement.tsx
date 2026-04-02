@@ -28,6 +28,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { logger } from "@/utils/logger";
 import {
     Download,
     Upload,
@@ -88,7 +89,7 @@ export default function DataManagement() {
             const data = await getDataStats();
             setStats(data);
         } catch (error) {
-            console.error("加载统计失败:", error);
+            logger.error("加载统计失败:", error);
         } finally {
             setLoading(false);
         }
@@ -113,7 +114,7 @@ export default function DataManagement() {
             toast.success(data.encrypted ? "加密数据导出成功" : "数据导出成功");
         } catch (error) {
             toast.error("导出失败: " + (error instanceof Error ? error.message : '未知错误'));
-            console.error(error);
+            logger.error("数据导出失败:", error);
         } finally {
             setExporting(false);
         }
@@ -209,7 +210,7 @@ export default function DataManagement() {
             setShowImportDialog(true);
         } catch (error) {
             toast.error("无法读取文件");
-            console.error(error);
+            logger.error("读取导入文件失败:", error);
         }
 
         // 重置文件输入
@@ -243,7 +244,7 @@ export default function DataManagement() {
             }
         } catch (error) {
             toast.error("导入失败");
-            console.error(error);
+            logger.error("数据导入失败:", error);
         } finally {
             setImporting(false);
             setPendingImportData(null);

@@ -24,6 +24,7 @@ import type { Profile, UserRole } from "@/types/types";
 import { Users, Shield } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { logger } from "@/utils/logger";
 
 export default function Admin() {
   const { user } = useAuth();
@@ -52,7 +53,7 @@ export default function Admin() {
       setCurrentUserRole(profile.role);
       loadProfiles();
     } catch (error) {
-      console.error("检查权限失败:", error);
+      logger.error("检查权限失败:", error);
       navigate("/");
     }
   };
@@ -64,7 +65,7 @@ export default function Admin() {
       setProfiles(data);
     } catch (error) {
       toast.error("加载用户列表失败");
-      console.error(error);
+      logger.error("加载用户列表失败:", error);
     } finally {
       setLoading(false);
     }
@@ -77,7 +78,7 @@ export default function Admin() {
       loadProfiles();
     } catch (error) {
       toast.error("更新失败");
-      console.error(error);
+      logger.error("更新用户角色失败:", error);
     }
   };
 

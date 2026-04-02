@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { Calendar, CheckSquare, Edit, Eye, FileText, Filter, Globe, Plus, Square, Trash, Trash2 } from "lucide-react";
+import { Calendar, CheckSquare, Edit, Eye, FileText, Filter, Globe, Plus, Square, Trash, Trash2, AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -28,11 +28,12 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/context/LocalAuthProvider";
 import { deleteArticle, getArticles } from "@/db/api";
+import { logger } from "@/utils/logger";
 import { deleteAllArticleVersions } from "@/db/versionService";
 import type { ArticleWithSite } from "@/types/types";
 
 export default function Articles() {
-  const { user, isDecrypted } = useAuth();
+  const { user, isDecrypted, logout } = useAuth();
   const navigate = useNavigate();
   const [articles, setArticles] = useState<ArticleWithSite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,11 +42,9 @@ export default function Articles() {
   const [isBatchMode, setIsBatchMode] = useState(false);
 
   useEffect(() => {
-    // 只有在用户已登录且数据已解密时才加载
     if (user?.id && isDecrypted) {
       loadArticles();
-    } else if (!user) {
-      // 用户未登录，清空数据
+    } else if (!user || !isDecrypted) {
       setArticles([]);
       setLoading(false);
     }
@@ -58,7 +57,7 @@ export default function Articles() {
       setArticles(data);
     } catch (error) {
       toast.error("加载文章失败");
-      console.error(error);
+      logger.error("加载文章失败:", error);
     } finally {
       setLoading(false);
     }
@@ -73,7 +72,7 @@ export default function Articles() {
       loadArticles();
     } catch (error) {
       toast.error("删除失败");
-      console.error(error);
+      logger.error("删除文章失败:", error);
     }
   };
 
@@ -99,7 +98,7 @@ export default function Articles() {
       loadArticles();
     } catch (error) {
       toast.error("批量删除失败");
-      console.error(error);
+      logger.error("批量删除文章失败:", error);
     }
   };
 
@@ -228,6 +227,36 @@ export default function Articles() {
                     删除选中 ({selectedArticles.size})
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 数据未解密提示 */}
+        {!isDecrypted && (
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 backdrop-blur-sm">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-900/50">
+                  <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base sm:text-lg font-semibold text-amber-800 dark:text-amber-200">
+                    需要重新登录
+                  </h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    您的会话已过期，请重新登录以访问您的数据
+                  </p>
+                </div>
+                <Button
+                  onClick={() => {
+                    logout();
+                    navigate("/login");
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  重新登录
+                </Button>
               </div>
             </CardContent>
           </Card>

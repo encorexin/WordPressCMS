@@ -4,6 +4,7 @@
  */
 
 import { db, generateId, getTimestamp } from './database';
+import { storageLogger } from '@/utils/logger';
 import type {
     LocalUser,
     LocalArticle,
@@ -373,7 +374,7 @@ export async function migrateFromDexie(
 
         return { success: true, message: '数据迁移成功' };
     } catch (error) {
-        console.error('数据迁移失败:', error);
+        storageLogger.error('数据迁移失败:', error);
         return { success: false, message: '数据迁移失败: ' + (error as Error).message };
     }
 }

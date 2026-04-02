@@ -20,6 +20,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { logger } from "@/utils/logger";
 import {
     Plus,
     Loader2,
@@ -70,7 +71,7 @@ export default function Templates() {
             const data = await getTemplates(user.id);
             setTemplates(data);
         } catch (error) {
-            console.error("加载模板失败:", error);
+            logger.error("加载模板失败:", error);
         } finally {
             setLoading(false);
         }

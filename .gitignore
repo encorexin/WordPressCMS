@@ -31,3 +31,14 @@ history/*.json
 # 扩展构建输出
 extension-build/
 extension/icons/*.svg
+
+# HarmonyOS
+harmonyos/.hvigor/
+harmonyos/**/build/
+harmonyos/**/.preview/
+harmonyos/entry/src/main/resources/rawfile/
+harmonyos/**/node_modules/
+harmonyos/**/.cxx/
+harmonyos/**/.test/
+*.hap
+*.app

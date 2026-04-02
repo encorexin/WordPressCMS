@@ -3,6 +3,8 @@
  * 使用 PBKDF2 派生密钥，AES-GCM 加密
  */
 
+import { cryptoLogger } from './logger';
+
 // 加密常量
 const PBKDF2_ITERATIONS = 100000;
 const SALT_LENGTH = 16;
@@ -108,7 +110,7 @@ export async function decryptData(encryptedData: EncryptedData, password: string
         const decoder = new TextDecoder();
         return decoder.decode(decryptedBuffer);
     } catch (error) {
-        console.error('解密失败:', error);
+        cryptoLogger.error('解密失败:', error);
         return null;
     }
 }

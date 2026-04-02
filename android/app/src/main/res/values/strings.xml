@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WordPress CMS</string>
+    <string name="title_activity_main">WordPress CMS</string>
+    <string name="package_name">com.wpcms.app</string>
+    <string name="custom_url_scheme">com.wpcms.app</string>
+</resources>

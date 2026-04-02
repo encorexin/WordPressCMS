@@ -14,6 +14,7 @@ import {
     hasEncryptionKey,
     restoreEncryptionKey
 } from '@/utils/encryptedStorage';
+import { authLogger } from '@/utils/logger';
 
 interface AuthContextType {
     user: LocalUser | null;
@@ -60,9 +61,9 @@ export function LocalAuthProvider({ children, whiteList = [] }: LocalAuthProvide
                     const restored = await restoreEncryptionKey(currentUser.id);
                     if (restored) {
                         setIsDecrypted(true);
-                        console.log('加密密钥已自动恢复');
+                        authLogger.debug('加密密钥已自动恢复');
                     } else {
-                        console.log('无法恢复加密密钥，需要重新登录');
+                        authLogger.debug('无法恢复加密密钥，需要重新登录');
                     }
 
                     // 异步刷新会话以获取最新数据
@@ -72,8 +73,7 @@ export function LocalAuthProvider({ children, whiteList = [] }: LocalAuthProvide
                     }
                 }
             } catch (error) {
-                console.error('初始化认证失败:', error);
-                // 即使刷新失败，也保留当前会话
+                authLogger.error('初始化认证失败:', error);
                 const currentUser = getCurrentUser();
                 if (currentUser) {
                     setUser(currentUser);

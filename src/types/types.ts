@@ -63,3 +63,12 @@ export interface GenerateArticleRequest {
   keywords: string;
   template?: string;
 }
+
+// WordPress 分类类型
+export interface WordPressCategory {
+  id: number;
+  name: string;
+  slug: string;
+  parent: number;
+  count: number;
+}

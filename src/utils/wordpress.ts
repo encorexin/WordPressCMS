@@ -1,13 +1,4 @@
-import type { WordPressSite } from "@/types/types";
-
-// WordPress 分类类型
-export interface WordPressCategory {
-  id: number;
-  name: string;
-  slug: string;
-  parent: number;
-  count: number;
-}
+import type { WordPressSite, WordPressCategory } from "@/types/types";
 
 // WordPress REST API 基础URL
 const getApiUrl = (siteUrl: string) => {

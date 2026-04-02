@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/LocalAuthProvider";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -31,7 +32,7 @@ import {
   updateSiteStatus,
 } from "@/db/api";
 import type { WordPressSite, WordPressSiteInput } from "@/types/types";
-import { Plus, Globe, Trash2, Edit, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Globe, Trash2, Edit, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { testWordPressConnection } from "@/utils/wordpress";
 import {
   AlertDialog,
@@ -44,9 +45,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { logger } from "@/utils/logger";
 
 export default function Sites() {
-  const { user } = useAuth();
+  const { user, isDecrypted, logout } = useAuth();
+  const navigate = useNavigate();
   const [sites, setSites] = useState<WordPressSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -65,8 +68,12 @@ export default function Sites() {
   });
 
   useEffect(() => {
-    loadSites();
-  }, [user]);
+    if (user?.id && isDecrypted) {
+      loadSites();
+    } else if (!isDecrypted) {
+      setLoading(false);
+    }
+  }, [user, isDecrypted]);
 
   useEffect(() => {
     if (editingSite) {
@@ -87,13 +94,15 @@ export default function Sites() {
   }, [editingSite, form]);
 
   const loadSites = async () => {
+    if (!user?.id || !isDecrypted) return;
+    
     try {
       setLoading(true);
       const data = await getWordPressSites(user?.id);
       setSites(data);
     } catch (error) {
       toast.error("加载站点失败");
-      console.error(error);
+      logger.error("加载站点失败:", error);
     } finally {
       setLoading(false);
     }
@@ -118,7 +127,7 @@ export default function Sites() {
       loadSites();
     } catch (error) {
       toast.error(editingSite ? "更新失败" : "添加失败");
-      console.error(error);
+      logger.error(editingSite ? "更新站点失败:" : "添加站点失败:", error);
     }
   };
 
@@ -130,7 +139,7 @@ export default function Sites() {
       loadSites();
     } catch (error) {
       toast.error("删除失败");
-      console.error(error);
+      logger.error("删除站点失败:", error);
     }
   };
 
@@ -149,7 +158,7 @@ export default function Sites() {
       loadSites();
     } catch (error) {
       toast.error("测试连接失败");
-      console.error(error);
+      logger.error("测试连接失败:", error);
     } finally {
       setTestingConnection(null);
     }
@@ -180,6 +189,7 @@ export default function Sites() {
               管理您的WordPress网站连接信息
             </p>
           </div>
+          {isDecrypted && (
           <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all">
@@ -282,7 +292,38 @@ export default function Sites() {
               </Form>
             </DialogContent>
           </Dialog>
+          )}
         </div>
+
+        {/* 数据未解密提示 */}
+        {!isDecrypted && (
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 backdrop-blur-sm">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-900/50">
+                  <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base sm:text-lg font-semibold text-amber-800 dark:text-amber-200">
+                    需要重新登录
+                  </h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    您的会话已过期，请重新登录以访问您的数据
+                  </p>
+                </div>
+                <Button
+                  onClick={() => {
+                    logout();
+                    navigate("/login");
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  重新登录
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">

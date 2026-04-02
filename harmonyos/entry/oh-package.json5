@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "WordPress CMS HarmonyOS Entry",
+  "main": "",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}

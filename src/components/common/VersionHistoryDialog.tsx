@@ -26,6 +26,7 @@ import {
   deleteArticleVersion,
   getArticleVersions,
 } from "@/db/versionService";
+import { logger } from "@/utils/logger";
 
 interface VersionHistoryDialogProps {
   articleId: string | null;
@@ -58,7 +59,7 @@ export function VersionHistoryDialog({
       const data = await getArticleVersions(user.id, articleId);
       setVersions(data);
     } catch (error) {
-      console.error("加载版本历史失败:", error);
+      logger.error("加载版本历史失败:", error);
       toast.error("加载版本历史失败");
     } finally {
       setLoading(false);

@@ -7,6 +7,7 @@ import ky, {
   type KyResponse,
   type NormalizedOptions,
 } from "ky";
+import { aiLogger } from "@/utils/logger";
 
 export interface SSEOptions {
   onData: (data: string) => void;
@@ -141,7 +142,7 @@ export const sendChatStream = async (
           onUpdate(currentContent);
         }
       } catch {
-        console.warn("Failed to parse SSE data:", data);
+        aiLogger.debug("SSE 数据解析失败:", data);
       }
     },
     onCompleted: (error?: Error) => {
@@ -152,7 +153,7 @@ export const sendChatStream = async (
       }
     },
     onAborted: () => {
-      console.log("Stream aborted");
+      aiLogger.debug("Stream 已中止");
     },
   });
 
@@ -246,7 +247,7 @@ export async function generateSEOSlug(
   };
 
   try {
-    console.log("SEO Slug API 请求:", { endpoint, body });
+    aiLogger.debug("开始生成 SEO Slug");
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -256,12 +257,12 @@ export async function generateSEOSlug(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Slug 生成失败:", response.status, errorText);
+      aiLogger.error("AI Slug 生成失败:", response.status, errorText);
       throw new Error(`API 请求失败: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("API 原始响应:", JSON.stringify(data, null, 2));
+    aiLogger.debug("API 响应接收成功");
 
     // 尝试多种方式提取内容
     let slug = "";
@@ -298,12 +299,10 @@ export async function generateSEOSlug(
       slug = data.trim();
     }
 
-    console.log("提取的原始内容:", slug);
+    aiLogger.debug("提取的原始内容:", slug);
 
-    // 如果仍然为空，尝试基于标题自动生成一个简单的 slug
     if (!slug) {
-      console.log("API 未返回有效内容，使用本地生成");
-      // 使用 pinyin 或简单的中文到英文映射是理想的，这里先用简单处理
+      aiLogger.warn("API 未返回有效内容，使用本地生成");
       slug = "article-" + Date.now().toString(36);
     }
 
@@ -319,13 +318,13 @@ export async function generateSEOSlug(
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "")
-      .substring(0, 60); // 限制长度
+      .substring(0, 60);
 
-    console.log("最终处理后:", slug);
+    aiLogger.debug("最终处理后的 slug:", slug);
 
     return slug;
   } catch (error) {
-    console.error("生成 SEO Slug 失败:", error);
+    aiLogger.error("生成 SEO Slug 失败:", error);
     throw error;
   }
 }

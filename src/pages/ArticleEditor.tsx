@@ -1,7 +1,6 @@
-import { ArrowLeft, Download, FileText, Globe, History, ImagePlus, Lightbulb, Loader2, PenTool, Save, Send, Sparkles, Wand2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
-import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Download, FileText, Globe, History, ImagePlus, Lightbulb, Loader2, PenTool, Save, Send, Sparkles, Wand2, Settings } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { RichTextEditor } from "@/components/common/RichTextEditor";
@@ -36,474 +35,205 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/LocalAuthProvider";
-import { getEffectiveAISettings, getImageSettings, getSlugSettings } from "@/db/aiSettings";
-import {
-  createArticle,
-  getArticle,
-  getWordPressSites,
-  updateArticle,
-  updateArticleStatus,
-} from "@/db/api";
-import type { ArticleVersion } from "@/db/database";
 import { downloadSingleArticle } from "@/db/dataExport";
-import { type ArticleTemplate, getTemplates, initDefaultTemplates } from "@/db/templateService";
-import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
-import { createArticleVersion } from "@/db/versionService";
+import type { ArticleVersion, AISettings } from "@/db/database";
 import { useHotkeys } from "@/hooks/use-hotkeys";
-import type { ArticleInput, WordPressSite } from "@/types/types";
-import { generateSEOSlug, sendChatStream } from "@/utils/aiChat";
-import { generateImage, generateImagePrompt, IMAGE_PROVIDERS, type ImageGenerationConfig, insertImageToContent } from "@/utils/imageGeneration";
-import { getWordPressCategories, publishToWordPress, updateWordPressPost, type WordPressCategory } from "@/utils/wordpress";
-
+import {
+  useArticleForm,
+  useArticleGenerator,
+  useArticlePublisher,
+  useImageGenerator,
+  useArticleAssets,
+  useVersionHistory,
+} from "@/hooks/useArticle";
+import { getAllAISettings, getEffectiveAISettings, getSlugSettings } from "@/db/aiSettings";
+import { logger } from "@/utils/logger";
 
 export default function ArticleEditor() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { id } = useParams();
-  const isNew = id === "new";
 
-  const [sites, setSites] = useState<WordPressSite[]>([]);
-  const [templates, setTemplates] = useState<ArticleTemplate[]>([]);
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<ArticleTemplate | null>(null);
-  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
-  const [loading, setLoading] = useState(!isNew);
-  const [generating, setGenerating] = useState(false);
-  const [generatingImage, setGeneratingImage] = useState(false);
-  const [publishing, setPublishing] = useState(false);
   const [currentContent, setCurrentContent] = useState("");
-  const [showImageDialog, setShowImageDialog] = useState(false);
-  const [imagePrompt, setImagePrompt] = useState("");
-  const [imageProvider, setImageProvider] = useState<string>("openai");
-  const [imageApiKey, setImageApiKey] = useState("");
-  const [imageEndpoint, setImageEndpoint] = useState("");
-  const [imageModel, setImageModel] = useState("");
-  const [imageStatus, setImageStatus] = useState("");
-  const [wpPostId, setWpPostId] = useState<string | null>(null);
-  const [wpCategories, setWpCategories] = useState<WordPressCategory[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
-  const [postSlug, setPostSlug] = useState("");
-  const [generatingSlug, setGeneratingSlug] = useState(false);
-  const [showVersionDialog, setShowVersionDialog] = useState(false);
   const [useRichEditor, setUseRichEditor] = useState(false);
-  const [generateProgress, setGenerateProgress] = useState(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [aiSettingsList, setAiSettingsList] = useState<AISettings[]>([]);
+  const [selectedAiSettingsId, setSelectedAiSettingsId] = useState<string>("");
 
-  const form = useForm<ArticleInput>({
-    defaultValues: {
-      title: "",
-      content: "",
-      keywords: "",
-      template: "",
-      site_id: "",
+  const {
+    form,
+    loading,
+    sites,
+    wpPostId,
+    setWpPostId,
+    isNew,
+    articleId,
+    handleSave,
+    saveArticle,
+  } = useArticleForm();
+
+  const {
+    templates,
+    topics,
+    selectedTemplate,
+    selectedTopic,
+    setSelectedTemplate,
+    selectTopic,
+    clearSelectedTopic,
+    useTopic,
+    loadTopics,
+  } = useArticleAssets();
+
+  const { generating, progress: generateProgress, generate, stop: stopGenerate } = useArticleGenerator({
+    onUpdate: (content) => {
+      setCurrentContent(content);
+      form.setValue("content", content);
+    },
+    selectedTopic,
+    onTopicUsed: () => {
+      clearSelectedTopic();
+      loadTopics();
     },
   });
 
+  const {
+    publishing,
+    categories: wpCategories,
+    selectedCategories,
+    setSelectedCategories,
+    postSlug,
+    setPostSlug,
+    generatingSlug,
+    loadCategories,
+    publish,
+    generateSlug,
+  } = useArticlePublisher({
+    articleId,
+    wpPostId,
+    onPublished: (postId) => setWpPostId(postId),
+    onUpdated: () => navigate("/articles"),
+  });
+
+  const {
+    generating: generatingImage,
+    status: imageStatus,
+    showDialog: showImageDialog,
+    setShowDialog: setShowImageDialog,
+    prompt: imagePrompt,
+    setPrompt: setImagePrompt,
+    settings: imageSettings,
+    loadSettings: loadImageSettings,
+    openDialog,
+    generate: generateImageAction,
+    insertImage,
+    updateSettings: updateImageSettings,
+    providers: IMAGE_PROVIDERS,
+  } = useImageGenerator();
+
+  const {
+    versions,
+    showDialog: showVersionDialog,
+    loading: loadingVersions,
+    openDialog: openVersionDialog,
+    closeDialog: closeVersionDialog,
+    restore: restoreVersion,
+  } = useVersionHistory({
+    articleId,
+    userId: user?.id,
+    onRestore: (version: ArticleVersion) => {
+      form.setValue("title", version.title);
+      form.setValue("content", version.content || "");
+      form.setValue("keywords", version.keywords || "");
+      form.setValue("template", version.template || "");
+      setCurrentContent(version.content || "");
+    },
+  });
+
+  const handleSelectTopic = useCallback(
+    (topic: { id: string; title: string; keywords?: string; description?: string }) => {
+      selectTopic(topic as Parameters<typeof selectTopic>[0]);
+      if (topic.keywords) {
+        form.setValue("keywords", topic.keywords);
+      }
+      if (topic.title) {
+        form.setValue("title", topic.title);
+      }
+    },
+    [selectTopic, form]
+  );
+
   useEffect(() => {
-    loadSites();
-    loadTemplates();
-    loadTopics();
-    loadImageSettings();
-    if (!isNew && id) {
-      loadArticle(id);
-    }
-  }, [id, isNew, user]);
-
-  const loadTemplates = async () => {
-    if (!user?.id) return;
-    try {
-      await initDefaultTemplates(user.id);
-      const data = await getTemplates(user.id);
-      setTemplates(data);
-      // 默认选择第一个模板
-      if (data.length > 0 && !selectedTemplate) {
-        setSelectedTemplate(data[0]);
-        form.setValue("template", data[0].name);
+    const loadAiSettings = async () => {
+      if (!user?.id) return;
+      try {
+        const settings = await getAllAISettings(user.id);
+        setAiSettingsList(settings);
+        const defaultSettings = settings.find(s => s.is_default);
+        if (defaultSettings) {
+          setSelectedAiSettingsId(defaultSettings.id);
+        } else if (settings.length > 0) {
+          setSelectedAiSettingsId(settings[0].id);
+        }
+      } catch (error) {
+        logger.error("加载 AI 配置失败:", error);
       }
-    } catch (error) {
-      console.error("加载模板失败:", error);
-    }
-  };
+    };
+    loadAiSettings();
+  }, [user?.id]);
 
-  const loadTopics = async () => {
-    if (!user?.id) return;
-    try {
-      const data = await getUnusedTopics(user.id);
-      setTopics(data);
-    } catch (error) {
-      console.error("加载主题失败:", error);
-    }
-  };
-
-  const handleSelectTopic = (topic: Topic) => {
-    setSelectedTopic(topic);
-    // 自动填充关键词
-    if (topic.keywords) {
-      form.setValue("keywords", topic.keywords);
-    }
-    // 自动填充标题
-    if (topic.title) {
-      form.setValue("title", topic.title);
-    }
-    toast.success(`已选择主题: ${topic.title}`);
-  };
-
-  const loadSites = async () => {
-    try {
-      const data = await getWordPressSites(user?.id);
-      setSites(data);
-    } catch (error) {
-      console.error("加载站点失败:", error);
-    }
-  };
-
-  // 加载 WordPress 分类
-  const loadCategories = async (siteId: string) => {
-    const site = sites.find(s => s.id === siteId);
-    if (!site) return;
-
-    try {
-      const result = await getWordPressCategories(site);
-      if (result.success) {
-        setWpCategories(result.categories);
-      } else {
-        console.error("加载分类失败:", result.message);
-        setWpCategories([]);
-      }
-    } catch (error) {
-      console.error("加载分类失败:", error);
-      setWpCategories([]);
-    }
-  };
-
-  // 加载保存的图片生成设置
-  const loadImageSettings = async () => {
-    if (!user?.id) return;
-    try {
-      const settings = await getImageSettings(user.id);
-      if (settings && settings.enabled) {
-        setImageProvider(settings.provider);
-        setImageApiKey(settings.apiKey);
-        setImageEndpoint(settings.endpoint);
-        setImageModel(settings.model);
-      }
-    } catch (error) {
-      console.error("加载图片设置失败:", error);
-    }
-  };
-
-  // 使用 AI 生成 SEO 友好的文章别名
-  const handleGenerateSlug = async () => {
+  const handleGenerateSlug = useCallback(async () => {
     const title = form.getValues("title");
-    console.log("开始生成 Slug, 标题:", title);
-
     if (!title) {
       toast.error("请先输入文章标题");
       return;
     }
 
     if (!user?.id) {
-      console.log("用户未登录");
       toast.error("请先登录");
       return;
     }
 
     try {
-      setGeneratingSlug(true);
-      console.log("获取 AI 设置...");
       const settings = await getEffectiveAISettings(user.id);
       const slugSettings = await getSlugSettings(user.id);
 
-      // 如果 slug 功能被禁用
       if (slugSettings && !slugSettings.enabled) {
         toast.error("文章别名生成功能已禁用，请在 AI 设置中启用");
         return;
       }
 
-      // 使用专用的 slug 模型，如果没有设置则使用主模型
       const slugModelToUse = slugSettings?.model || settings.model;
-
-      console.log("AI 设置:", {
-        hasApiKey: !!settings.api_key,
-        endpoint: settings.api_endpoint,
-        slugModel: slugModelToUse,
-      });
 
       if (!settings.api_key || !settings.api_endpoint) {
         toast.error("请先在 AI 设置中配置 API");
         return;
       }
 
-      console.log("调用 AI 生成 Slug，使用模型:", slugModelToUse);
-      const slug = await generateSEOSlug(title, {
-        endpoint: settings.api_endpoint,
-        apiKey: settings.api_key,
+      await generateSlug(title, {
+        api_endpoint: settings.api_endpoint,
+        api_key: settings.api_key,
         model: slugModelToUse,
       });
-      console.log("生成结果:", slug);
-
-      if (slug) {
-        setPostSlug(slug);
-        toast.success("已生成 SEO 友好的别名");
-      } else {
-        toast.error("生成失败，返回结果为空");
-      }
     } catch (error) {
-      console.error("生成别名失败:", error);
-      toast.error(`生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setGeneratingSlug(false);
+      logger.error("生成别名失败:", error);
     }
-  };
+  }, [form, user?.id, generateSlug]);
 
-  const openImageDialog = () => {
+  const handleOpenImageDialog = useCallback(() => {
     const keywords = form.getValues("keywords");
     const title = form.getValues("title");
-    const prompt = generateImagePrompt(keywords || "", title || "");
-    setImagePrompt(prompt);
-    setShowImageDialog(true);
-  };
+    openDialog(keywords || "", title || "");
+  }, [form, openDialog]);
 
-  const handleGenerateImage = async () => {
-    if (!imageApiKey) {
-      toast.error("请输入图片生成 API Key");
-      return;
-    }
-
-    if (!imagePrompt) {
-      toast.error("请输入图片描述");
-      return;
-    }
-
-    if (imageProvider === 'custom' && !imageEndpoint) {
-      toast.error("自定义端点需要提供 API 端点");
-      return;
-    }
-
-    try {
-      setGeneratingImage(true);
-      setImageStatus("正在生成图片...");
-
-      const config: ImageGenerationConfig = {
-        provider: imageProvider as ImageGenerationConfig["provider"],
-        apiKey: imageApiKey,
-        apiEndpoint: imageEndpoint || undefined,
-        model: imageModel || undefined,
-      };
-
-      const result = await generateImage(imagePrompt, config, setImageStatus);
-
-      // 将图片插入到文章内容中
-      const currentContent = form.getValues("content") || "";
-      const newContent = insertImageToContent(currentContent, result.url, result.alt);
+  const handleGenerateImage = useCallback(async () => {
+    const result = await generateImageAction();
+    if (result) {
+      const currentContentValue = form.getValues("content") || "";
+      const newContent = insertImage(currentContentValue, result.url, result.alt);
       form.setValue("content", newContent);
       setCurrentContent(newContent);
-
-      toast.success("图片已插入到文章开头");
-      setShowImageDialog(false);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "图片生成失败";
-      toast.error(message);
-      setImageStatus(`错误: ${message}`);
-    } finally {
-      setGeneratingImage(false);
     }
-  };
+  }, [generateImageAction, form, insertImage]);
 
-
-  const loadArticle = async (articleId: string) => {
-    if (!user?.id) return;
-    try {
-      setLoading(true);
-      const article = await getArticle(user.id, articleId);
-      if (article) {
-        form.reset({
-          title: article.title,
-          content: article.content || "",
-          keywords: article.keywords || "",
-          template: article.template || "默认模板",
-          site_id: article.site_id || "",
-        });
-        setCurrentContent(article.content || "");
-        // 加载WordPress文章ID用于后续更新
-        if (article.wordpress_post_id) {
-          setWpPostId(article.wordpress_post_id);
-        }
-      }
-    } catch (error) {
-      toast.error("加载文章失败");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSave = useCallback(async (data: ArticleInput) => {
-    try {
-      if (!user?.id) {
-        toast.error("用户未登录");
-        return;
-      }
-
-      if (isNew) {
-        await createArticle(user.id, data);
-        toast.success("文章创建成功");
-      } else if (id) {
-        // 先创建版本历史
-        await createArticleVersion(id, user.id, {
-          title: data.title,
-          content: data.content || null,
-          keywords: data.keywords || null,
-          template: data.template || null,
-        });
-        // 再更新文章
-        await updateArticle(user.id, id, data);
-        toast.success("文章保存成功，已创建版本历史");
-      }
-      navigate("/articles");
-    } catch (error) {
-      toast.error("保存失败");
-      console.error(error);
-    }
-  }, [user?.id, isNew, id, navigate]);
-
-  // 恢复版本
-  const handleRestoreVersion = (version: ArticleVersion) => {
-    form.setValue("title", version.title);
-    form.setValue("content", version.content || "");
-    form.setValue("keywords", version.keywords || "");
-    form.setValue("template", version.template || "");
-    setCurrentContent(version.content || "");
-  };
-
-  // 注册编辑器快捷键
-  useHotkeys([
-    {
-      key: "s",
-      ctrl: true,
-      handler: () => {
-        form.handleSubmit(handleSave)();
-      },
-    },
-    {
-      key: "p",
-      ctrl: true,
-      handler: () => {
-        // 发布前确认
-        if (window.confirm("确定要发布这篇文章吗？")) {
-          handlePublish();
-        }
-      },
-    },
-  ]);
-
-  const handleGenerate = async () => {
-    const keywords = form.getValues("keywords");
-    const template = form.getValues("template");
-
-    if (!keywords) {
-      toast.error("请输入关键词");
-      return;
-    }
-
-    if (!user?.id) {
-      toast.error("用户未登录");
-      return;
-    }
-
-    try {
-      setGenerating(true);
-      setCurrentContent("");
-
-      // 获取用户的 AI 设置
-      const aiSettings = await getEffectiveAISettings(user.id);
-
-      if (!aiSettings.api_key) {
-        toast.error("请先在 AI 设置中配置 API Key");
-        setGenerating(false);
-        return;
-      }
-
-      // 优先使用选中模板的提示词，否则使用 AI 设置中的默认提示词
-      const basePrompt = selectedTemplate?.system_prompt || aiSettings.system_prompt;
-
-      // 处理系统提示词中的占位符
-      const systemPrompt = basePrompt
-        .replace(/\{keywords\}/g, keywords)
-        .replace(/\{template\}/g, template || "默认模板");
-
-      // 用户消息：简洁的生成请求
-      const userMessage = `关键词：${keywords}\n模板风格：${template || "默认模板"}\n\n请直接输出文章内容：`;
-
-      // 创建新的 AbortController
-      abortControllerRef.current = new AbortController();
-      setGenerateProgress(0);
-
-      // 模拟进度增长
-      const progressInterval = setInterval(() => {
-        setGenerateProgress((prev) => {
-          if (prev >= 90) return prev;
-          return prev + Math.random() * 15;
-        });
-      }, 1000);
-
-      await sendChatStream({
-        endpoint: aiSettings.api_endpoint,
-        apiKey: aiSettings.api_key,
-        model: aiSettings.model,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: userMessage,
-          },
-        ],
-        signal: abortControllerRef.current.signal,
-        onUpdate: (content: string) => {
-          setCurrentContent(content);
-          form.setValue("content", content);
-        },
-        onComplete: async () => {
-          clearInterval(progressInterval);
-          setGenerateProgress(100);
-          toast.success("文章生成完成");
-          setGenerating(false);
-          // 如果选择了主题，标记为已使用
-          if (selectedTopic) {
-            await markTopicAsUsed(selectedTopic.id);
-            setSelectedTopic(null);
-            await loadTopics(); // 刷新主题列表
-          }
-        },
-        onError: (error: Error) => {
-          clearInterval(progressInterval);
-          if (error.name === "AbortError") {
-            toast.info("生成已取消");
-          } else {
-            toast.error("生成失败: " + error.message);
-          }
-          setGenerating(false);
-        },
-      });
-    } catch (error) {
-      toast.error("生成失败");
-      console.error(error);
-      setGenerating(false);
-    }
-  };
-
-  // 停止生成
-  const handleStopGenerate = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-  };
-
-  const handlePublish = async () => {
+  const handlePublish = useCallback(async () => {
     const title = form.getValues("title");
     const content = form.getValues("content");
     const siteId = form.getValues("site_id");
@@ -524,69 +254,52 @@ export default function ArticleEditor() {
       return;
     }
 
-    try {
-      setPublishing(true);
+    const saved = await saveArticle(form.getValues());
+    if (!saved) return;
 
-      // 先保存文章
-      if (!user?.id) {
-        toast.error("用户未登录");
-        return;
-      }
-
-      let articleId = id;
-      if (isNew) {
-        const article = await createArticle(user.id, {
-          title,
-          content,
-          keywords: form.getValues("keywords"),
-          template: form.getValues("template"),
-          site_id: siteId,
-        });
-        articleId = article.id;
-      } else if (id && user?.id) {
-        await updateArticle(user.id, id, {
-          title,
-          content,
-          site_id: siteId,
-        });
-      }
-
-      // 发布到WordPress - 检查是否需要更新现有文章
-      const publishOptions = {
-        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-        slug: postSlug || undefined,
-      };
-
-      let result;
-      if (wpPostId) {
-        // 已有WordPress文章ID，更新现有文章
-        result = await updateWordPressPost(site, wpPostId, title, content, publishOptions);
-        if (result.success && articleId) {
-          await updateArticleStatus(articleId, "published");
-          toast.success("更新发布成功");
-          navigate("/articles");
-        } else {
-          toast.error(result.message);
-        }
-      } else {
-        // 新发布
-        result = await publishToWordPress(site, title, content, publishOptions);
-        if (result.success && articleId) {
-          await updateArticleStatus(articleId, "published", result.postId);
-          setWpPostId(result.postId || null);
-          toast.success("发布成功");
-          navigate("/articles");
-        } else {
-          toast.error(result.message);
-        }
-      }
-    } catch (error) {
-      toast.error("发布失败");
-      console.error(error);
-    } finally {
-      setPublishing(false);
+    const result = await publish(site, title, content);
+    if (result.success) {
+      navigate("/articles");
     }
-  };
+  }, [form, sites, saveArticle, publish, navigate]);
+
+  const handleGenerate = useCallback(() => {
+    const keywords = form.getValues("keywords");
+    const template = form.getValues("template");
+    generate(keywords, template, selectedTemplate?.system_prompt, selectedAiSettingsId || undefined);
+  }, [form, generate, selectedTemplate, selectedAiSettingsId]);
+
+  const handleDownload = useCallback(
+    (format: "markdown" | "txt" | "html") => {
+      const article = {
+        title: form.getValues("title") || "无标题",
+        content: form.getValues("content") || "",
+        keywords: form.getValues("keywords"),
+        template: form.getValues("template"),
+        status: "draft",
+      };
+      downloadSingleArticle(article, format);
+      toast.success(`文章已下载为 ${format === "markdown" ? "Markdown" : format === "txt" ? "文本" : "HTML"} 格式`);
+    },
+    [form]
+  );
+
+  useHotkeys([
+    {
+      key: "s",
+      ctrl: true,
+      handler: () => form.handleSubmit(handleSave)(),
+    },
+    {
+      key: "p",
+      ctrl: true,
+      handler: () => {
+        if (window.confirm("确定要发布这篇文章吗？")) {
+          handlePublish();
+        }
+      },
+    },
+  ]);
 
   if (loading) {
     return (
@@ -599,7 +312,6 @@ export default function ArticleEditor() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20 dark:from-gray-950 dark:via-blue-950/20 dark:to-purple-950/10">
       <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl">
-        {/* 头部操作栏 */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div className="flex items-center space-x-2 sm:space-x-4">
             <Button variant="ghost" size="sm" onClick={() => navigate("/articles")}>
@@ -614,7 +326,7 @@ export default function ArticleEditor() {
             {!isNew && (
               <Button
                 variant="outline"
-                onClick={() => setShowVersionDialog(true)}
+                onClick={openVersionDialog}
                 className="hidden sm:flex border-2 hover:bg-blue-50 dark:hover:bg-blue-950/50"
               >
                 <History className="mr-2 h-4 w-4" />
@@ -649,49 +361,19 @@ export default function ArticleEditor() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {!isNew && (
-                  <DropdownMenuItem onClick={() => setShowVersionDialog(true)}>
+                  <DropdownMenuItem onClick={openVersionDialog}>
                     <History className="mr-2 h-4 w-4" />
                     历史版本
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => {
-                  const article = {
-                    title: form.getValues("title") || "无标题",
-                    content: form.getValues("content") || "",
-                    keywords: form.getValues("keywords"),
-                    template: form.getValues("template"),
-                    status: "draft",
-                  };
-                  downloadSingleArticle(article, 'markdown');
-                  toast.success("文章已下载为 Markdown 格式");
-                }}>
+                <DropdownMenuItem onClick={() => handleDownload("markdown")}>
                   下载 Markdown (.md)
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  const article = {
-                    title: form.getValues("title") || "无标题",
-                    content: form.getValues("content") || "",
-                    keywords: form.getValues("keywords"),
-                    template: form.getValues("template"),
-                    status: "draft",
-                  };
-                  downloadSingleArticle(article, 'txt');
-                  toast.success("文章已下载为文本格式");
-                }}>
-                  下载文本 (.txt)
+                <DropdownMenuItem onClick={() => handleDownload("txt")}>
+                  下载文本
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  const article = {
-                    title: form.getValues("title") || "无标题",
-                    content: form.getValues("content") || "",
-                    keywords: form.getValues("keywords"),
-                    template: form.getValues("template"),
-                    status: "draft",
-                  };
-                  downloadSingleArticle(article, 'html');
-                  toast.success("文章已下载为 HTML 格式");
-                }}>
-                  下载网页 (.html)
+                <DropdownMenuItem onClick={() => handleDownload("html")}>
+                  下载网页
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -699,7 +381,6 @@ export default function ArticleEditor() {
         </div>
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
-          {/* 主编辑区域 */}
           <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
             <Card className="border-0 shadow-lg bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
               <CardHeader>
@@ -792,9 +473,7 @@ export default function ArticleEditor() {
             </Card>
           </div>
 
-          {/* 侧边栏 */}
           <div className="space-y-4 sm:space-y-6">
-            {/* AI生成 */}
             <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
@@ -805,7 +484,6 @@ export default function ArticleEditor() {
               <CardContent>
                 <Form {...form}>
                   <form className="space-y-4">
-                    {/* 主题选择 */}
                     {topics.length > 0 && (
                       <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
@@ -814,7 +492,7 @@ export default function ArticleEditor() {
                         </label>
                         <Select
                           onValueChange={(value) => {
-                            const topic = topics.find(t => t.id === value);
+                            const topic = topics.find((t) => t.id === value);
                             if (topic) {
                               handleSelectTopic(topic);
                             }
@@ -839,6 +517,37 @@ export default function ArticleEditor() {
                         )}
                       </div>
                     )}
+                    {aiSettingsList.length > 0 && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium flex items-center gap-2">
+                          <Settings className="h-4 w-4 text-purple-500" />
+                          AI 配置
+                        </label>
+                        <Select
+                          value={selectedAiSettingsId}
+                          onValueChange={setSelectedAiSettingsId}
+                        >
+                          <SelectTrigger className="text-sm">
+                            <SelectValue placeholder="选择 AI 配置" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {aiSettingsList.map((setting) => (
+                              <SelectItem key={setting.id} value={setting.id}>
+                                <div className="flex items-center gap-2">
+                                  {setting.name}
+                                  {setting.is_default && (
+                                    <span className="text-xs text-muted-foreground">(默认)</span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          {aiSettingsList.find(s => s.id === selectedAiSettingsId)?.model || "选择配置"}
+                        </p>
+                      </div>
+                    )}
                     <FormField
                       control={form.control}
                       name="keywords"
@@ -846,11 +555,7 @@ export default function ArticleEditor() {
                         <FormItem>
                           <FormLabel className="text-sm">关键词</FormLabel>
                           <FormControl>
-                            <Input
-                              placeholder="输入关键词，用逗号分隔"
-                              {...field}
-                              className="text-sm"
-                            />
+                            <Input placeholder="输入关键词，用逗号分隔" {...field} className="text-sm" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -865,7 +570,7 @@ export default function ArticleEditor() {
                           <Select
                             onValueChange={(value) => {
                               field.onChange(value);
-                              const template = templates.find(t => t.name === value);
+                              const template = templates.find((t) => t.name === value);
                               setSelectedTemplate(template || null);
                             }}
                             value={field.value}
@@ -896,7 +601,7 @@ export default function ArticleEditor() {
                       <Button
                         type="button"
                         className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
-                        onClick={generating ? handleStopGenerate : handleGenerate}
+                        onClick={generating ? stopGenerate : handleGenerate}
                       >
                         {generating ? (
                           <>
@@ -928,7 +633,7 @@ export default function ArticleEditor() {
                       type="button"
                       variant="outline"
                       className="w-full"
-                      onClick={openImageDialog}
+                      onClick={handleOpenImageDialog}
                       disabled={generating || generatingImage}
                     >
                       <ImagePlus className="mr-2 h-4 w-4" />
@@ -939,7 +644,6 @@ export default function ArticleEditor() {
               </CardContent>
             </Card>
 
-            {/* 发布设置 */}
             <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
@@ -959,7 +663,8 @@ export default function ArticleEditor() {
                           <Select
                             onValueChange={(value) => {
                               field.onChange(value);
-                              loadCategories(value);
+                              const site = sites.find((s) => s.id === value);
+                              if (site) loadCategories(site);
                               setSelectedCategories([]);
                             }}
                             value={field.value}
@@ -982,10 +687,9 @@ export default function ArticleEditor() {
                       )}
                     />
 
-                    {/* 文章别名 */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label className="text-sm">文章别名 (Slug)</Label>
+                        <Label className="text-sm">文章别名</Label>
                         <Button
                           type="button"
                           variant="ghost"
@@ -1013,7 +717,6 @@ export default function ArticleEditor() {
                       </p>
                     </div>
 
-                    {/* 文章分类 */}
                     {wpCategories.length > 0 && (
                       <div className="space-y-2">
                         <Label className="text-sm">文章分类</Label>
@@ -1021,7 +724,7 @@ export default function ArticleEditor() {
                           {wpCategories.map((cat) => (
                             <label
                               key={cat.id}
-                              className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 p-1 rounded text-sm"
+                              className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 p-1 rounded"
                             >
                               <input
                                 type="checkbox"
@@ -1030,21 +733,22 @@ export default function ArticleEditor() {
                                   if (e.target.checked) {
                                     setSelectedCategories([...selectedCategories, cat.id]);
                                   } else {
-                                    setSelectedCategories(selectedCategories.filter(id => id !== cat.id));
+                                    setSelectedCategories(
+                                      selectedCategories.filter((id) => id !== cat.id)
+                                    );
                                   }
                                 }}
                                 className="rounded border-gray-300"
                               />
-                              <span>{cat.name}</span>
-                              <span className="text-xs text-muted-foreground">({cat.count})</span>
+                              <span className="text-sm">{cat.name}</span>
+                              {cat.count > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  ({cat.count})
+                                </span>
+                              )}
                             </label>
                           ))}
                         </div>
-                        {selectedCategories.length > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            已选择 {selectedCategories.length} 个分类
-                          </p>
-                        )}
                       </div>
                     )}
                   </form>
@@ -1055,122 +759,98 @@ export default function ArticleEditor() {
         </div>
       </div>
 
-      {/* 图片生成对话框 */}
       <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ImagePlus className="h-5 w-5" />
-              生成文章配图
-            </DialogTitle>
-            <DialogDescription>
-              使用 AI 生成与文章内容相关的配图
-            </DialogDescription>
+            <DialogTitle>生成配图</DialogTitle>
+            <DialogDescription>使用 AI 生成文章配图</DialogDescription>
           </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* 提供商选择 */}
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label>图片服务提供商</Label>
-              <Select value={imageProvider} onValueChange={setImageProvider}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择提供商" />
-                </SelectTrigger>
-                <SelectContent>
-                  {IMAGE_PROVIDERS.map((provider) => (
-                    <SelectItem key={provider.value} value={provider.value}>
-                      {provider.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>图片描述</Label>
+              <Textarea
+                placeholder="描述你想要生成的图片..."
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                className="min-h-[80px]"
+              />
             </div>
-
-            {/* API Key */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>服务商</Label>
+                <Select
+                  value={imageSettings.provider}
+                  onValueChange={(value) => updateImageSettings({ provider: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(IMAGE_PROVIDERS).map(([key, name]) => (
+                      <SelectItem key={key} value={key}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>模型</Label>
+                <Input
+                  placeholder="默认模型"
+                  value={imageSettings.model}
+                  onChange={(e) => updateImageSettings({ model: e.target.value })}
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>API Key</Label>
               <Input
                 type="password"
                 placeholder="输入 API Key"
-                value={imageApiKey}
-                onChange={(e) => setImageApiKey(e.target.value)}
+                value={imageSettings.apiKey}
+                onChange={(e) => updateImageSettings({ apiKey: e.target.value })}
               />
             </div>
-
-            {/* 自定义端点 */}
-            {imageProvider === 'custom' && (
+            {imageSettings.provider === "custom" && (
               <div className="space-y-2">
                 <Label>API 端点</Label>
                 <Input
-                  placeholder="https://api.example.com/v1/images"
-                  value={imageEndpoint}
-                  onChange={(e) => setImageEndpoint(e.target.value)}
+                  placeholder="https://api.example.com/v1/images/generations"
+                  value={imageSettings.endpoint}
+                  onChange={(e) => updateImageSettings({ endpoint: e.target.value })}
                 />
               </div>
             )}
-
-            {/* 模型 */}
-            <div className="space-y-2">
-              <Label>模型（可选）</Label>
-              <Input
-                placeholder={`默认: ${imageProvider === 'openai' ? 'dall-e-3' : ''}`}
-                value={imageModel}
-                onChange={(e) => setImageModel(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>图片描述</Label>
-              <Textarea
-                placeholder="描述你想要的图片..."
-                value={imagePrompt}
-                onChange={(e) => setImagePrompt(e.target.value)}
-                className="min-h-[100px]"
-              />
-            </div>
-
             {imageStatus && (
-              <div className="text-sm text-muted-foreground bg-gray-100 dark:bg-gray-800 p-2 rounded">
-                {imageStatus}
-              </div>
+              <p className="text-sm text-muted-foreground">{imageStatus}</p>
             )}
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowImageDialog(false)}>
               取消
             </Button>
-            <Button
-              onClick={handleGenerateImage}
-              disabled={generatingImage}
-              className="bg-gradient-to-r from-green-500 to-teal-500"
-            >
+            <Button onClick={handleGenerateImage} disabled={generatingImage}>
               {generatingImage ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   生成中...
                 </>
               ) : (
-                <>
-                  <ImagePlus className="mr-2 h-4 w-4" />
-                  生成图片
-                </>
+                "生成图片"
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 版本历史对话框 */}
       <VersionHistoryDialog
-        articleId={id || null}
         open={showVersionDialog}
-        onOpenChange={setShowVersionDialog}
-        onRestore={handleRestoreVersion}
-        currentTitle={form.getValues("title")}
-        currentContent={form.getValues("content") || ""}
+        onOpenChange={closeVersionDialog}
+        versions={versions}
+        onRestore={restoreVersion}
+        loading={loadingVersions}
       />
     </div>
   );
 }
-

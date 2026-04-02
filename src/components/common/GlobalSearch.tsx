@@ -20,6 +20,7 @@ import {
 import { useAuth } from "@/context/LocalAuthProvider";
 import { globalSearch, getSearchTypeInfo, type SearchResult } from "@/db/search";
 import { useDebounce } from "@/hooks/use-debounce";
+import { logger } from "@/utils/logger";
 
 // 图标映射
 const iconMap = {
@@ -59,7 +60,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
         });
         setResults(searchResults);
       } catch (error) {
-        console.error("搜索失败:", error);
+        logger.error("搜索失败:", error);
         setResults([]);
       } finally {
         setLoading(false);

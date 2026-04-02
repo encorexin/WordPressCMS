@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { logger } from "@/utils/logger";
 import {
     Plus,
     Loader2,
@@ -81,7 +82,7 @@ export default function Topics() {
             const data = await getTopicsByCategory(user.id);
             setTopicsByCategory(data);
         } catch (error) {
-            console.error("加载主题失败:", error);
+            logger.error("加载主题失败:", error);
         } finally {
             setLoading(false);
         }

@@ -431,15 +431,31 @@ pnpm preview
 
 ---
 
-## � 文档
+## 📚 文档
 
 更多详细文档请查看 [doc](./doc/) 目录：
 
 | 文档 | 说明 |
 |------|------|
+| [BUILD.md](./doc/BUILD.md) | 多平台构建指南 (Web/扩展/Android/HarmonyOS) |
 | [EXTENSION.md](./doc/EXTENSION.md) | 浏览器扩展开发和使用指南 |
 | [DEPLOY.md](./doc/DEPLOY.md) | 部署指南 |
 | [OPTIMIZATION_ROADMAP.md](./doc/OPTIMIZATION_ROADMAP.md) | 项目优化路线图 |
+
+---
+
+## 🚀 多平台支持
+
+本项目支持构建到多个平台：
+
+| 平台 | 构建命令 | 输出 |
+|------|---------|------|
+| Web 应用 | `pnpm build` | `dist/` |
+| 浏览器扩展 | `pnpm build:extension` | `extension-build/` |
+| Android APK | `pnpm build:apk` | `android/app/build/outputs/apk/` |
+| HarmonyOS HAP | `pnpm build:hap` | `harmonyos/entry/build/outputs/` |
+
+详细构建说明请查看 [BUILD.md](./doc/BUILD.md)。 |
 
 ---
 

@@ -17,11 +17,6 @@ struct Index {
         .mixedMode(MixedMode.All)
         .cacheMode(CacheMode.None)
         .darkMode(WebDarkMode.Auto)
-        .webSecurityAccess(false)
-        .allowWindowOpenMethod(true)
-        .mediaPlayGestureAccess(true)
-        .geolocationAccess(true)
-        .databaseAccess(true)
         .width('100%')
         .height('100%')
         .onPageBegin((event: OnPageBeginEvent) => {
@@ -32,9 +27,6 @@ struct Index {
         })
         .onErrorReceive((event: OnErrorReceiveEvent) => {
           console.error('Error: ' + event?.error.getErrorInfo());
-        })
-        .onHttpErrorReceive((event: OnHttpErrorReceiveEvent) => {
-          console.error('HTTP Error: ' + event?.response.getResponseCode());
         })
     }
     .width('100%')

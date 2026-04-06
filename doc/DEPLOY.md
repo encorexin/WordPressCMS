@@ -1,28 +1,25 @@
 # 部署指南
 
-本文档介绍如何将 WordPress CMS 部署到生产环境。
+本文档介绍如何将 WordPress CMS Web 应用部署到生产环境。
 
 ---
 
-## 📦 构建项目
+## 构建项目
 
 ```bash
-# 安装依赖
-npm install
-
-# 构建生产版本
-npm run build
+pnpm install
+pnpm build
 ```
 
-构建完成后，所有静态文件会输出到 `dist/` 目录。
+构建完成后，所有静态文件输出到 `dist/` 目录。
 
 ---
 
-## 🚀 部署方式
+## 部署方式
 
 ### 方式一：静态文件服务器（推荐）
 
-由于本项目是纯前端应用，只需将 `dist/` 目录部署到任意静态文件服务器即可。
+本项目是纯前端应用，只需将 `dist/` 目录部署到任意静态文件服务器。
 
 #### Nginx 配置示例
 
@@ -65,7 +62,6 @@ server {
     RewriteRule . /index.html [L]
 </IfModule>
 
-# 缓存控制
 <IfModule mod_expires.c>
     ExpiresActive On
     ExpiresByType text/css "access plus 1 year"
@@ -75,7 +71,7 @@ server {
 
 ---
 
-### 方式二：Vercel（免费托管）
+### 方式二：Vercel
 
 1. 将代码推送到 GitHub
 2. 访问 [vercel.com](https://vercel.com)
@@ -83,56 +79,22 @@ server {
 4. 框架预设选择 **Vite**
 5. 点击 **Deploy**
 
-完成后会获得一个 `*.vercel.app` 域名。
-
 ---
 
-### 方式三：Netlify（免费托管）
+### 方式三：Netlify
 
 1. 将代码推送到 GitHub
 2. 访问 [netlify.com](https://netlify.com)
 3. 点击 **Add new site** → **Import an existing project**
 4. 选择 GitHub 仓库
 5. 配置：
-   - Build command: `npm run build`
+   - Build command: `pnpm build`
    - Publish directory: `dist`
 6. 点击 **Deploy**
 
 ---
 
-### 方式四：GitHub Pages
-
-1. 安装依赖：
-```bash
-npm install -D gh-pages
-```
-
-2. 在 `package.json` 中添加：
-```json
-{
-  "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
-  }
-}
-```
-
-3. 修改 `vite.config.ts`：
-```typescript
-export default defineConfig({
-  base: '/your-repo-name/',
-  // ...
-})
-```
-
-4. 部署：
-```bash
-npm run deploy
-```
-
----
-
-### 方式五：Docker 部署
+### 方式四：Docker
 
 创建 `Dockerfile`：
 
@@ -140,10 +102,10 @@ npm run deploy
 # 构建阶段
 FROM node:18-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+COPY package*.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm build
 
 # 生产阶段
 FROM nginx:alpine
@@ -160,11 +122,11 @@ server {
     listen 80;
     root /usr/share/nginx/html;
     index index.html;
-    
+
     location / {
         try_files $uri $uri/ /index.html;
     }
-    
+
     location /assets {
         expires 1y;
         add_header Cache-Control "public, immutable";
@@ -175,67 +137,22 @@ server {
 构建和运行：
 
 ```bash
-# 构建镜像
 docker build -t wordpress-cms .
-
-# 运行容器
 docker run -d -p 80:80 wordpress-cms
 ```
 
 ---
 
-## ⚙️ 生产环境优化
+## 安全注意事项
 
-### 1. 启用 HTTPS
-
-强烈建议在生产环境启用 HTTPS，可以使用 [Let's Encrypt](https://letsencrypt.org/) 免费证书。
-
-### 2. CDN 加速
-
-将静态资源托管到 CDN（如 Cloudflare、阿里云 CDN）可以显著提升加载速度。
-
-### 3. 性能优化提示
-
-构建时会有 chunk 大小警告，这是因为 streamdown 库包含了大量语法高亮主题。如需优化：
-
-```typescript
-// vite.config.ts
-export default defineConfig({
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor': ['react', 'react-dom', 'react-router-dom'],
-          'ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
-        }
-      }
-    }
-  }
-})
-```
+- **数据存储**：所有数据存储在用户浏览器本地 IndexedDB，服务器无需存储用户数据
+- **API Key**：用户的 AI API Key 仅存储在本地浏览器中
+- **WordPress 密码**：应用密码存储在本地，仅用于发布文章时的 API 调用
+- **HTTPS**：生产环境建议启用 HTTPS，可使用 [Let's Encrypt](https://letsencrypt.org/) 免费证书
 
 ---
 
-## 🔐 安全注意事项
-
-1. **数据存储**：所有数据存储在用户浏览器本地，服务器无需存储任何用户数据
-2. **API Key**：用户的 AI API Key 仅存储在其本地浏览器中
-3. **WordPress 密码**：应用密码存储在本地，仅用于发布文章时的 API 调用
-
----
-
-## 📋 部署检查清单
-
-- [ ] 构建成功，无报错
-- [ ] 配置了 SPA 路由处理（防止刷新 404）
-- [ ] 启用了 Gzip 压缩
-- [ ] 静态资源设置了缓存
-- [ ] （可选）启用了 HTTPS
-- [ ] （可选）配置了 CDN
-
----
-
-## 🆘 常见问题
+## 常见问题
 
 ### Q: 刷新页面显示 404？
 A: 需要配置服务器将所有路由重定向到 `index.html`，参见上方 Nginx/Apache 配置。

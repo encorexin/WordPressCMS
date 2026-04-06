@@ -136,8 +136,8 @@ export default function Keywords() {
 
             setShowDialog(false);
             await loadKeywords();
-        } catch (error: any) {
-            toast.error(error.message || "添加失败");
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "添加失败");
         } finally {
             setSaving(false);
         }

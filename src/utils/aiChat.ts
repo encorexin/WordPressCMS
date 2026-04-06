@@ -1,17 +1,10 @@
-import {
-  createParser,
-  type EventSourceParser,
-} from "eventsource-parser";
-import ky, {
-  type AfterResponseHook,
-  type KyResponse,
-  type NormalizedOptions,
-} from "ky";
+import { createParser, type EventSourceMessage, type EventSourceParser } from "eventsource-parser";
+import ky, { type AfterResponseHook, type KyResponse, type NormalizedOptions } from "ky";
 import { aiLogger } from "@/utils/logger";
 
 export interface SSEOptions {
   onData: (data: string) => void;
-  onEvent?: (event: any) => void;
+  onEvent?: (event: EventSourceMessage) => void;
   onCompleted?: (error?: Error) => void;
   onAborted?: () => void;
   onReconnectInterval?: (interval: number) => void;
@@ -39,8 +32,7 @@ export const createSSEHook = (options: SSEOptions): AfterResponseHook => {
 
     const isAborted: boolean = false;
 
-    const reader: ReadableStreamDefaultReader<Uint8Array> =
-      response.body.getReader();
+    const reader: ReadableStreamDefaultReader<Uint8Array> = response.body.getReader();
 
     const decoder: TextDecoder = new TextDecoder("utf8");
 
@@ -122,9 +114,7 @@ export interface ChatStreamOptions {
   signal?: AbortSignal;
 }
 
-export const sendChatStream = async (
-  options: ChatStreamOptions
-): Promise<void> => {
+export const sendChatStream = async (options: ChatStreamOptions): Promise<void> => {
   const { messages, onUpdate, onComplete, onError, signal } = options;
 
   let currentContent = "";
@@ -231,12 +221,12 @@ export async function generateSEOSlug(
 
   // 确保端点格式正确
   let endpoint = options.endpoint;
-  if (!endpoint.includes('/chat/completions') && !endpoint.includes('/v1/')) {
-    endpoint = endpoint.replace(/\/$/, '') + '/chat/completions';
+  if (!endpoint.includes("/chat/completions") && !endpoint.includes("/v1/")) {
+    endpoint = endpoint.replace(/\/$/, "") + "/chat/completions";
   }
 
   // 检查是否是推理模型（如 deepseek-reasoner）
-  const isReasonerModel = options.model?.includes('reasoner') || options.model?.includes('r1');
+  const isReasonerModel = options.model?.includes("reasoner") || options.model?.includes("r1");
 
   const body: Record<string, unknown> = {
     messages: [{ role: "user", content: prompt }],
@@ -285,17 +275,13 @@ export async function generateSEOSlug(
     // 其他可能的格式
     else if (data.choices?.[0]?.text) {
       slug = data.choices[0].text.trim();
-    }
-    else if (data.result) {
+    } else if (data.result) {
       slug = data.result.trim();
-    }
-    else if (data.response) {
+    } else if (data.response) {
       slug = data.response.trim();
-    }
-    else if (data.output) {
+    } else if (data.output) {
       slug = data.output.trim();
-    }
-    else if (typeof data === 'string') {
+    } else if (typeof data === "string") {
       slug = data.trim();
     }
 
@@ -307,9 +293,9 @@ export async function generateSEOSlug(
     }
 
     // 移除可能的引号和多余字符
-    slug = slug.replace(/^["'`]|["'`]$/g, '');
-    slug = slug.replace(/^slug[：:]\s*/i, '');
-    slug = slug.replace(/\n.*/g, ''); // 只取第一行
+    slug = slug.replace(/^["'`]|["'`]$/g, "");
+    slug = slug.replace(/^slug[：:]\s*/i, "");
+    slug = slug.replace(/\n.*/g, ""); // 只取第一行
 
     // 清理结果
     slug = slug
@@ -328,4 +314,3 @@ export async function generateSEOSlug(
     throw error;
   }
 }
-

@@ -17,66 +17,145 @@ const STORAGE_KEYS = {
 // 当前数据版本
 const CURRENT_DATA_VERSION = 1;
 
+// AES-GCM 加密常量
+const AES_KEY_LENGTH = 256;
+const AES_IV_LENGTH = 12;
+
 // 内存中缓存的解密密钥
 let cachedPassword: string | null = null;
 let cachedUserId: string | null = null;
 
 /**
- * 生成会话密钥（用于加密存储密码）
+ * ArrayBuffer 转 Base64
  */
-function generateSessionKey(): string {
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+/**
+ * Base64 转 ArrayBuffer
+ */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+/**
+ * 生成 AES-GCM 会话密钥
+ */
+async function generateSessionKey(): Promise<CryptoKey> {
+    return await crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: AES_KEY_LENGTH },
+        true,
+        ['encrypt', 'decrypt']
+    );
+}
+
+/**
+ * 导出 CryptoKey 为 Base64 字符串
+ */
+async function exportSessionKey(key: CryptoKey): Promise<string> {
+    const exported = await crypto.subtle.exportKey('raw', key);
+    return arrayBufferToBase64(exported);
+}
+
+/**
+ * 从 Base64 字符串导入 CryptoKey
+ */
+async function importSessionKey(keyData: string): Promise<CryptoKey> {
+    const buffer = base64ToArrayBuffer(keyData);
+    return await crypto.subtle.importKey(
+        'raw',
+        buffer,
+        { name: 'AES-GCM', length: AES_KEY_LENGTH },
+        false,
+        ['encrypt', 'decrypt']
+    );
 }
 
 /**
  * 获取或创建会话密钥
  */
-function getSessionKey(): string {
-    let sessionKey = sessionStorage.getItem('app_session_key');
-    if (!sessionKey) {
-        sessionKey = generateSessionKey();
-        sessionStorage.setItem('app_session_key', sessionKey);
+async function getOrCreateSessionKey(): Promise<CryptoKey> {
+    const storedKey = sessionStorage.getItem('app_session_key');
+    if (storedKey) {
+        try {
+            return await importSessionKey(storedKey);
+        } catch {
+            sessionStorage.removeItem('app_session_key');
+        }
     }
-    return sessionKey;
+    const key = await generateSessionKey();
+    const exported = await exportSessionKey(key);
+    sessionStorage.setItem('app_session_key', exported);
+    return key;
 }
 
 /**
- * 使用会话密钥加密密码
+ * 从 sessionStorage 获取已有的会话密钥
+ */
+async function getSessionKey(): Promise<CryptoKey | null> {
+    const storedKey = sessionStorage.getItem('app_session_key');
+    if (!storedKey) {
+        return null;
+    }
+    try {
+        return await importSessionKey(storedKey);
+    } catch {
+        sessionStorage.removeItem('app_session_key');
+        return null;
+    }
+}
+
+/**
+ * 使用 AES-GCM 加密密码
  */
 async function encryptPassword(password: string): Promise<string> {
-    const sessionKey = getSessionKey();
+    const sessionKey = await getOrCreateSessionKey();
     const encoder = new TextEncoder();
     const data = encoder.encode(password);
-    
-    // 使用简单的 XOR 加密（因为密钥只在内存和 sessionStorage 中）
-    const keyBytes = encoder.encode(sessionKey.slice(0, 32));
-    const encrypted = new Uint8Array(data.length);
-    for (let i = 0; i < data.length; i++) {
-        encrypted[i] = data[i] ^ keyBytes[i % keyBytes.length];
-    }
-    
-    return btoa(String.fromCharCode(...encrypted));
+
+    const iv = crypto.getRandomValues(new Uint8Array(AES_IV_LENGTH));
+
+    const encryptedBuffer = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        sessionKey,
+        data
+    );
+
+    // 将 IV 和密文拼接为 "iv:ciphertext" 格式（均为 base64）
+    return arrayBufferToBase64(iv) + ':' + arrayBufferToBase64(encryptedBuffer);
 }
 
 /**
- * 使用会话密钥解密密码
+ * 使用 AES-GCM 解密密码
  */
 async function decryptPassword(encrypted: string): Promise<string> {
-    const sessionKey = getSessionKey();
-    const decoder = new TextDecoder();
-    const encoder = new TextEncoder();
-    
-    const encryptedBytes = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
-    const keyBytes = encoder.encode(sessionKey.slice(0, 32));
-    
-    const decrypted = new Uint8Array(encryptedBytes.length);
-    for (let i = 0; i < encryptedBytes.length; i++) {
-        decrypted[i] = encryptedBytes[i] ^ keyBytes[i % keyBytes.length];
+    const sessionKey = await getSessionKey();
+    if (!sessionKey) {
+        throw new Error('会话密钥不存在，无法解密');
     }
-    
-    return decoder.decode(decrypted);
+
+    const [ivBase64, dataBase64] = encrypted.split(':');
+    const iv = new Uint8Array(base64ToArrayBuffer(ivBase64));
+    const encryptedData = new Uint8Array(base64ToArrayBuffer(dataBase64));
+
+    const decryptedBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        sessionKey,
+        encryptedData
+    );
+
+    return new TextDecoder().decode(decryptedBuffer);
 }
 
 /**

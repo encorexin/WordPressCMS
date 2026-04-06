@@ -91,7 +91,7 @@ pnpm build:extension
 ### 构建 Debug APK
 
 ```bash
-# 构建 Web 应用并同步
+# 构建 Web 应用并同步到 Android
 pnpm build:apk
 
 # 或使用 Gradle 直接构建
@@ -123,7 +123,7 @@ cd android
 | 密码 | wpcms2024 |
 | 有效期 | 25 年 |
 
-**⚠️ 重要：发布前请修改默认密码并备份密钥文件！**
+> **⚠️ 发布前请修改默认密码并备份密钥文件！**
 
 ### 构建 AAB (上架 Google Play)
 
@@ -138,18 +138,14 @@ cd android
 
 ## HarmonyOS HAP
 
+HarmonyOS 端为**完全原生 ArkTS 应用**，使用 DevEco Studio 或命令行构建。
+
 ### 前置要求
 
 - DevEco Studio 6.0+
 - HarmonyOS SDK API 20+
 
-### 同步 Web 资源
-
-```bash
-pnpm build:hap
-```
-
-### 使用 DevEco Studio 构建
+### 使用 DevEco Studio 构建（推荐）
 
 1. 用 DevEco Studio 打开 `harmonyos` 目录
 2. 等待项目同步完成
@@ -165,16 +161,18 @@ pnpm build:hap
 cd harmonyos
 
 # Debug HAP
-hvigorw assembleHap
+hvigorw assembleHap --mode module -p product=default
 
 # Release HAP
-hvigorw assembleHap --mode release
+hvigorw assembleHap --mode module -p product=default --mode release
 ```
+
+> 命令行构建需要先配置 DevEco Studio 工具链路径（ohpm、hvigor、node）。
 
 ### HAP 输出位置
 
 ```
-harmonyos/entry/build/default/outputs/default/entry-default-*.hap
+harmonyos/entry/build/default/outputs/default/entry-default-signed.hap
 ```
 
 ### 构建 APP (上架华为应用市场)
@@ -184,22 +182,18 @@ cd harmonyos
 hvigorw assembleApp --mode release
 ```
 
-输出：`harmonyos/entry/build/default/outputs/default/entry-default-*.app`
-
 ---
 
 ## 快速命令参考
 
 | 命令 | 说明 |
 |------|------|
-| `pnpm dev` | 启动开发服务器 |
+| `pnpm dev` | 启动 Web 开发服务器 |
 | `pnpm build` | 构建 Web 应用 |
 | `pnpm build:extension` | 构建浏览器扩展 |
 | `pnpm build:apk` | 构建 Android APK |
-| `pnpm build:hap` | 构建 HarmonyOS HAP |
 | `pnpm cap:sync` | 同步 Capacitor 资源 |
 | `pnpm cap:open` | 打开 Android Studio |
-| `pnpm sync:harmonyos` | 同步 HarmonyOS 资源 |
 
 ---
 
@@ -229,5 +223,5 @@ hvigorw assembleApp --mode release
 
 - [ ] 更新版本号 (`harmonyos/AppScope/app.json5`)
 - [ ] 配置正式签名
-- [ ] 构建 Release HAP
+- [ ] 使用 DevEco Studio 或 `hvigorw` 构建 Release HAP
 - [ ] 在真机测试

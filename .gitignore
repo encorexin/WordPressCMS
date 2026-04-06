@@ -32,22 +32,26 @@ history/*.json
 extension-build/
 extension/icons/*.svg
 
+# Android
+android/keystore.properties
+android/app/*.keystore
+android/local.properties
+android/.project
+android/.settings/
+android/app/.classpath
+android/app/.project
+android/app/.settings/
+
 # HarmonyOS
 harmonyos/.hvigor/
+harmonyos/.idea/
 harmonyos/**/build/
 harmonyos/**/.preview/
 harmonyos/entry/src/main/resources/rawfile/
 harmonyos/**/node_modules/
 harmonyos/**/.cxx/
 harmonyos/**/.test/
-*.hap
-*.app
-
-# Android 签名密钥 (敏感信息)
-android/keystore.properties
-android/app/*.keystore
-android/local.properties
-
-# HarmonyOS 签名配置 (敏感信息)
 harmonyos/build-profile.json5
 harmonyos/local.properties
+*.hap
+*.app

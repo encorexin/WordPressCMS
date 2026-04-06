@@ -1,4 +1,36 @@
-import type { WordPressSite, WordPressCategory } from "@/types/types";
+import type { WordPressCategory, WordPressSite } from "@/types/types";
+
+// WordPress REST API 文章请求数据
+interface WordPressPostData {
+  title: string;
+  content: string;
+  status: string;
+  categories?: number[];
+  slug?: string;
+}
+
+// WordPress REST API 创建文章响应
+interface WordPressPostResponse {
+  id: number;
+  title: { rendered: string };
+  content: { rendered: string };
+  status: string;
+  slug: string;
+}
+
+// WordPress REST API 分类原始响应
+interface WordPressCategoryResponse {
+  id: number;
+  name: string;
+  slug: string;
+  parent: number;
+  count: number;
+}
+
+// WordPress REST API 错误响应
+interface WordPressErrorResponse {
+  message?: string;
+}
 
 // WordPress REST API 基础URL
 const getApiUrl = (siteUrl: string) => {
@@ -58,10 +90,10 @@ export async function getWordPressCategories(
     });
 
     if (response.ok) {
-      const categories = await response.json();
+      const categories: WordPressCategoryResponse[] = await response.json();
       return {
         success: true,
-        categories: categories.map((cat: any) => ({
+        categories: categories.map((cat) => ({
           id: cat.id,
           name: cat.name,
           slug: cat.slug,
@@ -100,7 +132,7 @@ export async function publishToWordPress(
   try {
     const apiUrl = getApiUrl(site.site_url);
 
-    const postData: Record<string, any> = {
+    const postData: WordPressPostData = {
       title,
       content,
       status: "publish",
@@ -126,14 +158,14 @@ export async function publishToWordPress(
     });
 
     if (response.ok) {
-      const data = await response.json();
+      const data: WordPressPostResponse = await response.json();
       return {
         success: true,
         postId: data.id.toString(),
         message: "发布成功",
       };
     } else {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData: WordPressErrorResponse = await response.json().catch(() => ({}));
       return {
         success: false,
         message: errorData.message || `发布失败: ${response.status}`,
@@ -161,7 +193,7 @@ export async function updateWordPressPost(
   try {
     const apiUrl = getApiUrl(site.site_url);
 
-    const postData: Record<string, any> = {
+    const postData: Partial<WordPressPostData> = {
       title,
       content,
     };
@@ -201,4 +233,3 @@ export async function updateWordPressPost(
     };
   }
 }
-

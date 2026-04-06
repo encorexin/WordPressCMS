@@ -1,6 +1,6 @@
 
     import { defineConfig, loadConfigFromFile } from "vite";
-    import type { Plugin, ConfigEnv } from "vite";
+    import type { Plugin, ConfigEnv, UserConfig } from "vite";
     import tailwindcss from "tailwindcss";
     import autoprefixer from "autoprefixer";
     import fs from "fs/promises";
@@ -38,7 +38,7 @@
     export async function tryLoadConfigFromFile(
       filePath: string,
       env: ConfigEnv = { command: "serve", mode: "development" }
-    ): Promise<any | null> {
+    ): Promise<UserConfig | null> {
       try {
         const result = await loadConfigFromFile(env, filePath);
         return result ? result.config : null;
@@ -72,7 +72,9 @@
           // 🧹 尝试删除临时文件
           try {
             await fs.unlink(tempFilePath);
-          } catch (_) {}
+          } catch (_unlinkError: unknown) {
+            // 临时文件清理失败可以安全忽略
+          }
         }
       }
     }
@@ -186,7 +188,7 @@
         postcss: {
           plugins: [
             tailwindcss({
-              ...(tailwindResult as any),
+              ...(tailwindResult as Record<string, unknown>),
               content: [`${root}/index.html`, `${root}/src/**/*.{js,ts,jsx,tsx}`],
             }),
             autoprefixer(),

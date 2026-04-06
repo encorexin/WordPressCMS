@@ -131,27 +131,24 @@ export struct DataManagementPageContent {
         .padding(Spacing.LG)
       } else {
         // 统计数据网格
-        Row() {
+        Row({ space: Spacing.MD }) {
           this.StatItem('文章', this.articleCount, $r('sys.symbol.doc_filled_on_doc'))
           this.StatItem('站点', this.siteCount, $r('sys.symbol.link'))
         }
         .width('100%')
-        .justifyContent(FlexAlign.SpaceBetween)
 
-        Row() {
+        Row({ space: Spacing.MD }) {
           this.StatItem('模板', this.templateCount, $r('sys.symbol.square_and_pencil'))
           this.StatItem('关键词', this.keywordCount, $r('sys.symbol.magnifyingglass'))
         }
         .width('100%')
-        .justifyContent(FlexAlign.SpaceBetween)
         .margin({ top: Spacing.MD })
 
-        Row() {
+        Row({ space: Spacing.MD }) {
           this.StatItem('主题', this.topicCount, $r('sys.symbol.folder'))
           this.StatItem('总计', this.articleCount + this.siteCount + this.templateCount + this.keywordCount + this.topicCount, $r('sys.symbol.highlighter_line'))
         }
         .width('100%')
-        .justifyContent(FlexAlign.SpaceBetween)
         .margin({ top: Spacing.MD })
       }
     }

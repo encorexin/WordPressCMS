@@ -758,7 +758,7 @@ export struct ArticlesPageContent {
 
   @Builder
   ArticleMetaRow(article: Article) {
-    Row({ space: Spacing.MD }) {
+    Row({ space: Spacing.SM }) {
       this.SiteLabel(article.siteId)
 
       if (article.keywords.length > 0) {
@@ -766,21 +766,26 @@ export struct ArticlesPageContent {
           Text('关键词:')
             .fontSize(Typography.CAPTION)
             .fontColor(Colors.TEXT_HINT)
+            .flexShrink(0)
           Text(article.keywords)
             .fontSize(Typography.CAPTION)
             .fontColor(Colors.TEXT_SECONDARY)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .constraintSize({ maxWidth: 120 })
+            .layoutWeight(1)
         }
         .padding({ left: Spacing.SM, right: Spacing.SM, top: 2, bottom: 2 })
         .borderRadius(Radius.SM)
         .backgroundColor(Colors.BG_PRIMARY)
+        .layoutWeight(1)
+      } else {
+        Blank().layoutWeight(1)
       }
 
       Text(formatDateTime(article.createdAt))
         .fontSize(Typography.CAPTION)
         .fontColor(Colors.TEXT_HINT)
+        .flexShrink(0)
     }
     .width('100%')
   }

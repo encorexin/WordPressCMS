@@ -113,7 +113,7 @@ export struct ArticleEditorPageContent {
     try {
       const sitesPromise = SiteDao.findByUserId(this.currentUserId)
       const templatesPromise = TemplateDao.findByUserId(this.currentUserId)
-      const topicsPromise = TopicDao.findByUserId(this.currentUserId, 0) // 只加载未使用
+      const topicsPromise = TopicDao.findByUserId(this.currentUserId, -1) // 加载全部主题（含已使用），确保从主题库跳转时能匹配 selectedTopicId
       const aiSettingsPromise = AISettingsDao.findByUserId(this.currentUserId)
 
       this.sites = await sitesPromise

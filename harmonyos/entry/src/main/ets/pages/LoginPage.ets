@@ -55,6 +55,18 @@ export struct LoginPageContent {
           .fontSize(Typography.BODY)
           .fontColor(Colors.TEXT_SECONDARY)
           .margin({ top: Spacing.XS })
+
+        Row() {
+          SymbolGlyph($r('sys.symbol.lock_shield'))
+            .fontSize(Typography.CAPTION)
+            .fontColor([Colors.TEXT_HINT])
+          Text('数据存储在本地，不上传服务器')
+            .fontSize(Typography.CAPTION)
+            .fontColor(Colors.TEXT_HINT)
+            .margin({ left: Spacing.XS })
+        }
+        .margin({ top: Spacing.SM })
+        .alignItems(VerticalAlign.Center)
       }
       .alignItems(HorizontalAlign.Center)
       .margin({ bottom: Spacing.XL })

@@ -90,7 +90,7 @@ export struct AboutPageContent {
         .fontSize(Typography.BODY)
         .fontColor(Colors.TEXT_SECONDARY)
 
-      Text('v1.0.0')
+      Text('v1.1.0')
         .fontSize(Typography.CAPTION)
         .fontColor(Colors.TEXT_HINT)
         .padding({ left: Spacing.MD, right: Spacing.MD, top: Spacing.XS, bottom: Spacing.XS })

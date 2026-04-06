@@ -102,10 +102,13 @@ export class AuthService {
   }
 
   // 将认证状态写入 AppStorage
+  // 注意：必须先写 currentUserId/currentUserRole，最后写 isLoggedIn
+  // 因为 isLoggedIn 变化会触发 Index 的 @Watch → 创建 DashboardPageContent
+  // 如果 currentUserId 尚未写入，Dashboard.loadStats() 会因 userId 为空而短路返回 0
   static applySession(user: User): void {
-    AppStorage.set<boolean>('isLoggedIn', true)
     AppStorage.set<string>('currentUserId', user.id)
     AppStorage.set<string>('currentUserRole', user.role)
+    AppStorage.set<boolean>('isLoggedIn', true)
   }
 
   // 验证当前会话是否有效（数据库中用户仍存在）

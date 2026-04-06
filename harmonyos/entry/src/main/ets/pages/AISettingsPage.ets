@@ -1082,13 +1082,16 @@ export struct AISettingsPageContent {
       )
 
       if (result.length > 0) {
-        UiFeedback.showToast({ message: '连接测试成功', duration: 2000 })
+        const preview = result.length > 80 ? result.substring(0, 80) + '...' : result
+        UiFeedback.showToast({ message: `连接成功：${preview}`, duration: 3000 })
       } else {
-        UiFeedback.showToast({ message: '连接测试失败：无响应' })
+        UiFeedback.showToast({ message: '连接测试失败：无响应内容' })
       }
     } catch (err) {
-      Logger.error('Test connection failed: %{public}s', String(err))
-      UiFeedback.showToast({ message: '连接测试失败' })
+      const errMsg = String(err)
+      const brief = errMsg.length > 100 ? errMsg.substring(0, 100) + '...' : errMsg
+      Logger.error('Test connection failed: %{public}s', errMsg)
+      UiFeedback.showToast({ message: `连接失败：${brief}`, duration: 3000 })
     } finally {
       this.isTesting = false
     }
@@ -1131,15 +1134,18 @@ export struct AISettingsPageContent {
 
       if (result.length > 0) {
         this.connectionTested = true
-        UiFeedback.showToast({ message: '连接测试成功', duration: 2000 })
+        const preview = result.length > 80 ? result.substring(0, 80) + '...' : result
+        UiFeedback.showToast({ message: `连接成功：${preview}`, duration: 3000 })
       } else {
         this.connectionTested = false
-        UiFeedback.showToast({ message: '连接测试失败：无响应' })
+        UiFeedback.showToast({ message: '连接测试失败：无响应内容' })
       }
     } catch (err) {
       this.connectionTested = false
-      Logger.error('Form test connection failed: %{public}s', String(err))
-      UiFeedback.showToast({ message: '连接测试失败' })
+      const errMsg = String(err)
+      const brief = errMsg.length > 100 ? errMsg.substring(0, 100) + '...' : errMsg
+      Logger.error('Form test connection failed: %{public}s', errMsg)
+      UiFeedback.showToast({ message: `连接失败：${brief}`, duration: 3000 })
     } finally {
       this.isTesting = false
     }

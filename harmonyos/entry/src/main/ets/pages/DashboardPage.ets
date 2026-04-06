@@ -35,19 +35,47 @@ export struct DashboardPageContent {
   @State hasTemplates: boolean = false
   @State hasArticles: boolean = false
 
-  aboutToAppear(): void {
-    this.loadStats()
+  // 首次 aboutToAppear 完成后置 true，防止 onVisibleAreaChange 首帧重复加载
+  private hasAppeared: boolean = false
+
+  // 可靠获取 userId — @StorageProp 在组件创建初期可能尚未同步完成，
+  // 直接从 AppStorage.get 读取作为后备，彻底消除时序问题
+  private resolveUserId(): string {
+    if (this.currentUserId.length > 0) {
+      return this.currentUserId
+    }
+    return AppStorage.get<string>('currentUserId') || ''
   }
 
-  // 当 currentUserId 从空字符串变为有效值时自动加载数据
+  aboutToAppear(): void {
+    const userId = this.resolveUserId()
+    if (userId.length > 0) {
+      this.loadStats()
+    } else {
+      setTimeout(() => {
+        const retryId = this.resolveUserId()
+        if (retryId.length > 0 && this.articleCount === 0) {
+          this.loadStats()
+        }
+      }, 500)
+    }
+    setTimeout(() => {
+      this.hasAppeared = true
+    }, 1000)
+  }
+
   private onUserIdChanged(): void {
-    if (this.currentUserId.length > 0) {
+    const userId = this.resolveUserId()
+    if (userId.length > 0) {
       this.loadStats()
     }
   }
 
   private onRefreshSignal(): void {
-    this.loadStats()
+    const userId = this.resolveUserId()
+    if (userId.length > 0) {
+      this.loadStats()
+    }
   }
 
   build() {
@@ -80,6 +108,13 @@ export struct DashboardPageContent {
     .height('100%')
     .backgroundColor(Colors.BG_PRIMARY)
     .scrollBar(BarState.Off)
+    .onVisibleAreaChange([0.0, 1.0], (_isVisible: boolean, currentRatio: number) => {
+      // 从子页面返回时组件重新可见 → 自动刷新数据
+      if (this.hasAppeared && currentRatio > 0 && !this.isLoading) {
+        Logger.info('Dashboard onVisibleAreaChange: became visible, refreshing')
+        this.loadStats()
+      }
+    })
   }
 
   @Builder
@@ -119,7 +154,7 @@ export struct DashboardPageContent {
       .backgroundColor(Colors.BG_SECONDARY)
       .onClick(() => {
         this.loadStats()
-      UiFeedback.showToast({ message: '数据已刷新' })
+        UiFeedback.showToast({ message: '数据已刷新' })
       })
     }
     .width('100%')
@@ -133,11 +168,47 @@ export struct DashboardPageContent {
       // 第一行
       Row({ space: Spacing.MD }) {
         Column() {
-          this.StatCard('文章数', this.articleCount, 'doc_filled_on_doc', Colors.PRIMARY)
+          // 文章数 — 直接引用 @State，不通过 @Builder 参数传递
+          Column({ space: Spacing.SM }) {
+            SymbolGlyph($r('sys.symbol.doc_filled_on_doc'))
+              .fontSize(ComponentSize.ICON_LG)
+              .fontColor([Colors.PRIMARY])
+              .opacity(0.8)
+            Text(this.isLoading ? '-' : `${this.articleCount}`)
+              .fontSize(Typography.TITLE_LARGE)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Colors.TEXT_PRIMARY)
+            Text('文章数')
+              .fontSize(Typography.BODY)
+              .fontColor(Colors.TEXT_SECONDARY)
+          }
+          .width('100%')
+          .padding(Spacing.BASE)
+          .backgroundColor(Colors.BG_CARD)
+          .borderRadius(Radius.LG)
+          .shadow({ radius: 8, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
         }
         .layoutWeight(1)
         Column() {
-          this.StatCard('站点数', this.siteCount, 'link', Colors.SUCCESS)
+          // 站点数
+          Column({ space: Spacing.SM }) {
+            SymbolGlyph($r('sys.symbol.link'))
+              .fontSize(ComponentSize.ICON_LG)
+              .fontColor([Colors.SUCCESS])
+              .opacity(0.8)
+            Text(this.isLoading ? '-' : `${this.siteCount}`)
+              .fontSize(Typography.TITLE_LARGE)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Colors.TEXT_PRIMARY)
+            Text('站点数')
+              .fontSize(Typography.BODY)
+              .fontColor(Colors.TEXT_SECONDARY)
+          }
+          .width('100%')
+          .padding(Spacing.BASE)
+          .backgroundColor(Colors.BG_CARD)
+          .borderRadius(Radius.LG)
+          .shadow({ radius: 8, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
         }
         .layoutWeight(1)
       }
@@ -146,11 +217,47 @@ export struct DashboardPageContent {
       // 第二行
       Row({ space: Spacing.MD }) {
         Column() {
-          this.StatCard('模板数', this.templateCount, 'folder', Colors.WARNING)
+          // 模板数
+          Column({ space: Spacing.SM }) {
+            SymbolGlyph($r('sys.symbol.folder'))
+              .fontSize(ComponentSize.ICON_LG)
+              .fontColor([Colors.WARNING])
+              .opacity(0.8)
+            Text(this.isLoading ? '-' : `${this.templateCount}`)
+              .fontSize(Typography.TITLE_LARGE)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Colors.TEXT_PRIMARY)
+            Text('模板数')
+              .fontSize(Typography.BODY)
+              .fontColor(Colors.TEXT_SECONDARY)
+          }
+          .width('100%')
+          .padding(Spacing.BASE)
+          .backgroundColor(Colors.BG_CARD)
+          .borderRadius(Radius.LG)
+          .shadow({ radius: 8, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
         }
         .layoutWeight(1)
         Column() {
-          this.StatCard('关键词数', this.keywordCount, 'magnifyingglass', Colors.ERROR)
+          // 关键词数
+          Column({ space: Spacing.SM }) {
+            SymbolGlyph($r('sys.symbol.magnifyingglass'))
+              .fontSize(ComponentSize.ICON_LG)
+              .fontColor([Colors.ERROR])
+              .opacity(0.8)
+            Text(this.isLoading ? '-' : `${this.keywordCount}`)
+              .fontSize(Typography.TITLE_LARGE)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Colors.TEXT_PRIMARY)
+            Text('关键词数')
+              .fontSize(Typography.BODY)
+              .fontColor(Colors.TEXT_SECONDARY)
+          }
+          .width('100%')
+          .padding(Spacing.BASE)
+          .backgroundColor(Colors.BG_CARD)
+          .borderRadius(Radius.LG)
+          .shadow({ radius: 8, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
         }
         .layoutWeight(1)
       }
@@ -159,11 +266,47 @@ export struct DashboardPageContent {
       // 第三行：文章状态统计
       Row({ space: Spacing.MD }) {
         Column() {
-          this.StatCard('已发布', this.publishedCount, 'checkmark_circle_fill', Colors.SUCCESS)
+          // 已发布
+          Column({ space: Spacing.SM }) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+              .fontSize(ComponentSize.ICON_LG)
+              .fontColor([Colors.SUCCESS])
+              .opacity(0.8)
+            Text(this.isLoading ? '-' : `${this.publishedCount}`)
+              .fontSize(Typography.TITLE_LARGE)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Colors.TEXT_PRIMARY)
+            Text('已发布')
+              .fontSize(Typography.BODY)
+              .fontColor(Colors.TEXT_SECONDARY)
+          }
+          .width('100%')
+          .padding(Spacing.BASE)
+          .backgroundColor(Colors.BG_CARD)
+          .borderRadius(Radius.LG)
+          .shadow({ radius: 8, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
         }
         .layoutWeight(1)
         Column() {
-          this.StatCard('草稿', this.draftCount, 'doc_text', Colors.TEXT_HINT)
+          // 草稿
+          Column({ space: Spacing.SM }) {
+            SymbolGlyph($r('sys.symbol.doc_text'))
+              .fontSize(ComponentSize.ICON_LG)
+              .fontColor([Colors.TEXT_HINT])
+              .opacity(0.8)
+            Text(this.isLoading ? '-' : `${this.draftCount}`)
+              .fontSize(Typography.TITLE_LARGE)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Colors.TEXT_PRIMARY)
+            Text('草稿')
+              .fontSize(Typography.BODY)
+              .fontColor(Colors.TEXT_SECONDARY)
+          }
+          .width('100%')
+          .padding(Spacing.BASE)
+          .backgroundColor(Colors.BG_CARD)
+          .borderRadius(Radius.LG)
+          .shadow({ radius: 8, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
         }
         .layoutWeight(1)
       }
@@ -171,34 +314,6 @@ export struct DashboardPageContent {
     }
     .width('100%')
     .margin({ bottom: Spacing.LG })
-  }
-
-  @Builder
-  StatCard(label: string, count: number, iconName: string, iconColor: string) {
-    Column({ space: Spacing.SM }) {
-      SymbolGlyph($r(`sys.symbol.${iconName}`))
-        .fontSize(ComponentSize.ICON_LG)
-        .fontColor([iconColor])
-        .opacity(0.8)
-
-      Text(this.isLoading ? '-' : count.toString())
-        .fontSize(Typography.TITLE_LARGE)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Colors.TEXT_PRIMARY)
-
-      Text(label)
-        .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_SECONDARY)
-    }
-    .width('100%')
-    .padding(Spacing.BASE)
-    .backgroundColor(Colors.BG_CARD)
-    .borderRadius(Radius.LG)
-    .shadow({
-      radius: 8,
-      color: 'rgba(0,0,0,0.05)',
-      offsetY: 2
-    })
   }
 
   @Builder
@@ -293,25 +408,25 @@ export struct DashboardPageContent {
   }
 
   // 检查设置进度
-  private async checkSetupProgress(): Promise<void> {
-    if (this.currentUserId.length === 0) {
+  private async checkSetupProgress(userId: string): Promise<void> {
+    if (userId.length === 0) {
       return
     }
     try {
       // 检查站点
-      const siteCount = await SiteDao.countByUserId(this.currentUserId)
+      const siteCount = await SiteDao.countByUserId(userId)
       this.hasSites = siteCount > 0
 
       // 检查AI设置
-      const aiSettings = await AISettingsDao.findByUserId(this.currentUserId)
+      const aiSettings = await AISettingsDao.findByUserId(userId)
       this.hasAISettings = aiSettings.length > 0
 
       // 检查模板
-      const templates = await TemplateDao.findByUserId(this.currentUserId)
+      const templates = await TemplateDao.findByUserId(userId)
       this.hasTemplates = templates.length > 0
 
       // 检查文章
-      const articles = await ArticleDao.findByUserId(this.currentUserId)
+      const articles = await ArticleDao.findByUserId(userId)
       this.hasArticles = articles.length > 0
     } catch (err) {
       Logger.error('Check setup progress failed: %{public}s', String(err))
@@ -319,15 +434,15 @@ export struct DashboardPageContent {
   }
 
   private async loadStats(): Promise<void> {
-    if (this.currentUserId.length === 0) {
+    const userId = this.resolveUserId()
+    if (userId.length === 0) {
       this.isLoading = false
       return
     }
 
     this.isLoading = true
     try {
-      // 文章数 + 状态统计
-      const articles = await ArticleDao.findByUserId(this.currentUserId)
+      const articles = await ArticleDao.findByUserId(userId)
       this.articleCount = articles.length
       let published = 0
       let draft = 0
@@ -341,19 +456,15 @@ export struct DashboardPageContent {
       this.publishedCount = published
       this.draftCount = draft
 
-      // 站点数
-      this.siteCount = await SiteDao.countByUserId(this.currentUserId)
+      this.siteCount = await SiteDao.countByUserId(userId)
 
-      // 模板数
-      const templates = await TemplateDao.findByUserId(this.currentUserId)
+      const templates = await TemplateDao.findByUserId(userId)
       this.templateCount = templates.length
 
-      // 关键词数
-      const keywords = await KeywordDao.findByUserId(this.currentUserId)
+      const keywords = await KeywordDao.findByUserId(userId)
       this.keywordCount = keywords.length
 
-      // 检查设置进度
-      await this.checkSetupProgress()
+      await this.checkSetupProgress(userId)
     } catch (err) {
       Logger.error('Load dashboard stats failed: %{public}s', String(err))
       UiFeedback.showToast({ message: '加载统计数据失败' })
@@ -389,38 +500,125 @@ export struct DashboardPageContent {
       .width('100%')
       .justifyContent(FlexAlign.Start)
 
-      // 检查项列表
+      // 检查项列表 — 直接引用 @State 变量，不通过 @Builder 参数传递
       Column({ space: Spacing.SM }) {
-        this.SetupCheckItem(
-          '添加WordPress站点',
-          this.hasSites,
-          () => {
-            this.navPathStack.pushPathByName(Routes.SITES, null)
+        // 添加WordPress站点
+        Row({ space: Spacing.SM }) {
+          if (this.hasSites) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.SUCCESS])
+          } else {
+            SymbolGlyph($r('sys.symbol.circle'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.TEXT_HINT])
           }
-        )
-        this.SetupCheckItem(
-          '配置AI设置',
-          this.hasAISettings,
-          () => {
-            this.navPathStack.pushPathByName(Routes.AI_SETTINGS, null)
+          Text('添加WordPress站点')
+            .fontSize(Typography.BODY)
+            .fontColor(this.hasSites ? Colors.TEXT_SECONDARY : Colors.TEXT_PRIMARY)
+            .fontWeight(this.hasSites ? FontWeight.Regular : FontWeight.Medium)
+            .decoration({ type: this.hasSites ? TextDecorationType.LineThrough : TextDecorationType.None })
+            .layoutWeight(1)
+          if (!this.hasSites) {
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.TEXT_HINT])
           }
-        )
-        this.SetupCheckItem(
-          '创建文章模板',
-          this.hasTemplates,
-          () => {
-            this.navPathStack.pushPathByName(Routes.TEMPLATES, null)
+        }
+        .width('100%')
+        .padding({ top: Spacing.SM, bottom: Spacing.SM })
+        .onClick(() => {
+          this.navPathStack.pushPathByName(Routes.SITES, null)
+        })
+
+        // 配置AI设置
+        Row({ space: Spacing.SM }) {
+          if (this.hasAISettings) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.SUCCESS])
+          } else {
+            SymbolGlyph($r('sys.symbol.circle'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.TEXT_HINT])
           }
-        )
-        this.SetupCheckItem(
-          '创作第一篇文章',
-          this.hasArticles,
-          () => {
-            const param = new ArticleEditorParam()
-            param.articleId = 'new'
-            this.navPathStack.pushPathByName(Routes.ARTICLE_EDITOR, param)
+          Text('配置AI设置')
+            .fontSize(Typography.BODY)
+            .fontColor(this.hasAISettings ? Colors.TEXT_SECONDARY : Colors.TEXT_PRIMARY)
+            .fontWeight(this.hasAISettings ? FontWeight.Regular : FontWeight.Medium)
+            .decoration({ type: this.hasAISettings ? TextDecorationType.LineThrough : TextDecorationType.None })
+            .layoutWeight(1)
+          if (!this.hasAISettings) {
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.TEXT_HINT])
           }
-        )
+        }
+        .width('100%')
+        .padding({ top: Spacing.SM, bottom: Spacing.SM })
+        .onClick(() => {
+          this.navPathStack.pushPathByName(Routes.AI_SETTINGS, null)
+        })
+
+        // 创建文章模板
+        Row({ space: Spacing.SM }) {
+          if (this.hasTemplates) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.SUCCESS])
+          } else {
+            SymbolGlyph($r('sys.symbol.circle'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.TEXT_HINT])
+          }
+          Text('创建文章模板')
+            .fontSize(Typography.BODY)
+            .fontColor(this.hasTemplates ? Colors.TEXT_SECONDARY : Colors.TEXT_PRIMARY)
+            .fontWeight(this.hasTemplates ? FontWeight.Regular : FontWeight.Medium)
+            .decoration({ type: this.hasTemplates ? TextDecorationType.LineThrough : TextDecorationType.None })
+            .layoutWeight(1)
+          if (!this.hasTemplates) {
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.TEXT_HINT])
+          }
+        }
+        .width('100%')
+        .padding({ top: Spacing.SM, bottom: Spacing.SM })
+        .onClick(() => {
+          this.navPathStack.pushPathByName(Routes.TEMPLATES, null)
+        })
+
+        // 创作第一篇文章
+        Row({ space: Spacing.SM }) {
+          if (this.hasArticles) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.SUCCESS])
+          } else {
+            SymbolGlyph($r('sys.symbol.circle'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.TEXT_HINT])
+          }
+          Text('创作第一篇文章')
+            .fontSize(Typography.BODY)
+            .fontColor(this.hasArticles ? Colors.TEXT_SECONDARY : Colors.TEXT_PRIMARY)
+            .fontWeight(this.hasArticles ? FontWeight.Regular : FontWeight.Medium)
+            .decoration({ type: this.hasArticles ? TextDecorationType.LineThrough : TextDecorationType.None })
+            .layoutWeight(1)
+          if (!this.hasArticles) {
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(ComponentSize.ICON_SM)
+              .fontColor([Colors.TEXT_HINT])
+          }
+        }
+        .width('100%')
+        .padding({ top: Spacing.SM, bottom: Spacing.SM })
+        .onClick(() => {
+          const param = new ArticleEditorParam()
+          param.articleId = 'new'
+          this.navPathStack.pushPathByName(Routes.ARTICLE_EDITOR, param)
+        })
       }
       .width('100%')
     }
@@ -429,41 +627,6 @@ export struct DashboardPageContent {
     .backgroundColor(Colors.BG_CARD)
     .borderRadius(Radius.LG)
     .margin({ top: Spacing.LG })
-  }
-
-  // 设置检查项
-  @Builder
-  SetupCheckItem(label: string, completed: boolean, onTapAction: () => void) {
-    Row({ space: Spacing.SM }) {
-      // 状态图标
-      if (completed) {
-        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-          .fontSize(ComponentSize.ICON_SM)
-          .fontColor([Colors.SUCCESS])
-      } else {
-        SymbolGlyph($r('sys.symbol.circle'))
-          .fontSize(ComponentSize.ICON_SM)
-          .fontColor([Colors.TEXT_HINT])
-      }
-
-      // 标签
-      Text(label)
-        .fontSize(Typography.BODY)
-        .fontColor(completed ? Colors.TEXT_SECONDARY : Colors.TEXT_PRIMARY)
-        .fontWeight(completed ? FontWeight.Regular : FontWeight.Medium)
-        .decoration({ type: completed ? TextDecorationType.LineThrough : TextDecorationType.None })
-        .layoutWeight(1)
-
-      // 箭头（未完成时显示）
-      if (!completed) {
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(ComponentSize.ICON_SM)
-          .fontColor([Colors.TEXT_HINT])
-      }
-    }
-    .width('100%')
-    .padding({ top: Spacing.SM, bottom: Spacing.SM })
-    .onClick(onTapAction)
   }
 
   // 获取已完成步骤数

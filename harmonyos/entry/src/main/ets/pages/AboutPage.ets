@@ -68,18 +68,11 @@ export struct AboutPageContent {
   AppHeader() {
     Column({ space: Spacing.SM }) {
       // 应用图标
-      Column() {
-        Text('WP')
-          .fontSize(32)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.TEXT_ON_PRIMARY)
-      }
-      .width(80)
-      .height(80)
-      .borderRadius(Radius.XL)
-      .backgroundColor(Colors.PRIMARY)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      Image($r('app.media.app_icon'))
+        .width(80)
+        .height(80)
+        .borderRadius(Radius.XL)
+        .objectFit(ImageFit.Cover)
 
       Text('WordPress CMS')
         .fontSize(Typography.TITLE)

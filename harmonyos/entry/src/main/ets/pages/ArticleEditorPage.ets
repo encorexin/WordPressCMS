@@ -299,6 +299,7 @@ export struct ArticleEditorPageContent {
     }
     if (this.siteId.length === 0) {
       UiFeedback.showToast({ message: '请选择发布站点' })
+      this.activePanel = 'publish'
       return null
     }
 
@@ -370,6 +371,8 @@ export struct ArticleEditorPageContent {
     }
 
     UiFeedback.showToast({ message: '更新发布成功' })
+    const currentRefresh = AppStorage.get<number>('articlesNeedRefresh') ?? 0
+    AppStorage.setOrCreate<number>('articlesNeedRefresh', currentRefresh + 1)
     this.navPathStack.pop()
   }
 
@@ -397,6 +400,8 @@ export struct ArticleEditorPageContent {
     }
 
     UiFeedback.showToast({ message: '发布成功' })
+    const currentRefresh2 = AppStorage.get<number>('articlesNeedRefresh') ?? 0
+    AppStorage.setOrCreate<number>('articlesNeedRefresh', currentRefresh2 + 1)
     this.navPathStack.pop()
   }
 
@@ -1022,6 +1027,9 @@ ${htmlContent}
             // 功能面板切换
             this.PanelTabs()
 
+            // 站点快速选择（始终显示）
+            this.SiteQuickSelect()
+
             // 当前面板内容
             if (this.activePanel === 'ai') {
               this.AIPanel()
@@ -1439,6 +1447,48 @@ ${htmlContent}
     })
   }
 
+  // 站点快速选择（始终显示在面板区域顶部）
+  @Builder
+  SiteQuickSelect() {
+    Row({ space: Spacing.SM }) {
+      Text('发布站点')
+        .fontSize(Typography.CAPTION)
+        .fontColor(Colors.TEXT_SECONDARY)
+        .flexShrink(0)
+
+      if (this.sites.length > 0) {
+        Select(this.sites.map((s: WordPressSite) => {
+          const option: SelectOption = { value: s.siteName }
+          return option
+        }))
+          .selected(this.sites.findIndex((s: WordPressSite) => s.id === this.siteId))
+          .value(this.getSelectedSiteName())
+          .font({ size: Typography.BODY })
+          .fontColor(Colors.TEXT_PRIMARY)
+          .selectedOptionFont({ size: Typography.BODY })
+          .selectedOptionFontColor(Colors.PRIMARY)
+          .optionFont({ size: Typography.BODY })
+          .optionFontColor(Colors.TEXT_PRIMARY)
+          .onSelect((index: number) => {
+            if (index >= 0 && index < this.sites.length) {
+              this.siteId = this.sites[index].id
+              this.selectedCategories = []
+              this.loadCategories(this.siteId)
+            }
+          })
+          .layoutWeight(1)
+          .height(36)
+      } else {
+        Text('暂无站点')
+          .fontSize(Typography.CAPTION)
+          .fontColor(Colors.TEXT_HINT)
+      }
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+    .padding({ top: Spacing.SM, bottom: Spacing.SM })
+  }
+
   // AI 生成面板
   @Builder
   AIPanel() {
@@ -1786,37 +1836,6 @@ ${htmlContent}
   @Builder
   PublishPanel() {
     Column({ space: Spacing.MD }) {
-      // 站点选择
-      Column({ space: Spacing.XS }) {
-        Text('发布站点')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
-
-        if (this.sites.length > 0) {
-          Select(this.sites.map((s: WordPressSite) => {
-            const option: SelectOption = { value: s.siteName }
-            return option
-          }))
-            .selected(this.sites.findIndex((s: WordPressSite) => s.id === this.siteId))
-            .value(this.getSelectedSiteName())
-            .onSelect((index: number) => {
-              if (index >= 0 && index < this.sites.length) {
-                this.siteId = this.sites[index].id
-                this.selectedCategories = []
-                this.loadCategories(this.siteId)
-              }
-            })
-            .width('100%')
-            .height(ComponentSize.INPUT_HEIGHT)
-        } else {
-          Text('暂无站点，请先添加')
-            .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_HINT)
-        }
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-
       // WordPress 分类
       if (this.wpCategories.length > 0) {
         Column({ space: Spacing.XS }) {

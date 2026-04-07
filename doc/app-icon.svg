@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 1024 1024" fill="none">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
   <defs>
     <linearGradient id="appIconBg" x1="140" y1="112" x2="884" y2="912" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#007DFF"/>
@@ -6,10 +7,18 @@
     </linearGradient>
     <mask id="appIconMarkMask" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
       <rect width="1024" height="1024" fill="black"/>
-      <path d="M252 284L366 736L512 488L658 736L772 284" fill="none" stroke="white" stroke-width="118" stroke-linecap="round" stroke-linejoin="round"/>
+      <path
+        d="M252 284L366 736L512 488L658 736L772 284"
+        fill="none"
+        stroke="white"
+        stroke-width="118"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
       <path d="M742 228L766 270L808 294L766 318L742 360L718 318L676 294L718 270Z" fill="black"/>
     </mask>
   </defs>
+
   <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#appIconBg)"/>
   <rect width="1024" height="1024" fill="white" mask="url(#appIconMarkMask)"/>
 </svg>

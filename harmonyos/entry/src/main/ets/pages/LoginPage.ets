@@ -32,18 +32,11 @@ export struct LoginPageContent {
 
       // Logo 区域
       Column() {
-        Row() {
-          Text('W')
-            .fontSize(28)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.TEXT_ON_PRIMARY)
-        }
-        .width(56)
-        .height(56)
-        .borderRadius(Radius.LG)
-        .backgroundColor(Colors.PRIMARY)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
+        Image($r('app.media.app_icon'))
+          .width(56)
+          .height(56)
+          .borderRadius(Radius.LG)
+          .objectFit(ImageFit.Cover)
 
         Text('WordPress CMS')
           .fontSize(Typography.TITLE)

@@ -1,6 +1,6 @@
 
 <div align="center">
-# WordPress 内容管理系统
+<h1>WordPress 内容管理系统</h1>
 
 ![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)

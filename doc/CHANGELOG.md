@@ -4,6 +4,51 @@
 
 ---
 
+## WordPressCMS v1.3.0 (2026-04-12)
+
+### HarmonyOS
+
+- **P0 安全与兼容修复** — 修复 `SiteCard` 复用态 `isTesting` 同步问题；为 `wordpress_sites.app_password`、`ai_settings.api_key`、`ai_settings.image_api_key` 引入字段级加密与兼容读取；统一数据导入归一化入口，兼容普通备份与整包加密备份。
+- **类型安全与错误处理收口** — 为 WordPress、AI 非流式响应、SSE、图片生成等高风险解析入口补齐显式接口与 helper，减少动态属性访问；统一 `Logger.error / warn / debug` 记录口径，避免静默吞错。
+- **设计令牌与深色模式清理** — 新增遮罩、强遮罩、浮层阴影、信息态浅背景、成功态浅背景等资源色，批量替换多处硬编码颜色；修复文章编辑器导出 HTML 在跟随系统主题时的深浅色判断。
+- **大文件拆分与模块化** — 完成 `ArticleEditorPage`、`KeywordsPage`、`AISettingsPage`、`TopicsPage`、`ArticlesPage`、`DataManagementPage`、`DashboardPage` 与 `ImageGenerationService` 的首轮拆分，主文件收敛为页面编排 / 服务编排，新增多组 HeaderPanel、ContentSection、Dialog 与 helper 组件。
+- **数据与存储基础设施升级** — 新增 `AppStorageKeys`，收口 Theme / Role 关键类型；引入 `BaseDao<T>` 试点；将 HarmonyOS 数据库 schema 升级到 `DB_VERSION = 2`，补齐 schema metadata、显式迁移链与多组高频索引。
+- **移动端界面优化** — 新建文章 FAB 改为真正的圆形图标按钮；主题页说明卡与搜索框、文章卡片区横向对齐；文章列表卡片增加摘要与元信息展示空间，底部操作区高度进一步拉长，提升小屏可读性与点击舒适度。
+
+### Web / Extension / Android
+
+- **P0 快速安全修复** — 修复 Dexie 迁移表名不一致问题，移除与 `react-router-dom` 主版本冲突的 `react-router` 直接依赖，并修正 Radix `Dialog` / `AlertDialog` 包装层的 `ref` 转发告警。
+- **数据层门面收口** — `src/db/api.ts` 收敛为统一兼容入口，`src/db/database.ts` 的 legacy 职责拆分到 `src/db/legacyDatabase.ts`，站点、模板、关键词、主题、Dashboard 等主要页面优先迁移到统一数据入口；`src/utils/wordpress.ts` 收敛为 `wordpressClient.ts` 的过渡导出层。
+- **质量门禁基础设施** — `package.json` 补齐 `lint`、`lint:fix`、`format`、`typecheck`、`test`、`test:coverage`，新增 `tsconfig.check.json`；Web 侧引入 Vitest + React Testing Library 最小测试样例，HarmonyOS 侧补齐 `ohosTest` / Hypium 测试骨架。
+- **构建与交付链路增强** — `pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm build:extension` 已形成可重复执行的基础验证链路；扩展解压产物可稳定生成，Android / Extension / HarmonyOS 对外版本统一提升到 `1.3.0`。
+
+---
+
+## HarmonyOS v1.2.0 (2026-04-08)
+
+### 新功能
+
+- **文章字数统计** — 在文章列表卡片与编辑器内展示字数，并写入数据库字段 `word_count`
+- **Token 统计** — 支持文章生成后的 Token 统计（本次/累计），并写入文章字段 `tokens_used`
+- **AI 配置 Token 统计** — AI 设置卡片展示该配置累计 Token 使用量，并写入字段 `tokens_used`
+- **离线预览** — 预览页改为本地 `rawfile` 资源渲染（marked + highlight.js + 主题 CSS），无网络也可用
+
+### 改进
+
+- **预览支持代码高亮** — 预览页对代码块启用 highlight.js 语法高亮
+- **预览跟随主题** — 预览页支持深浅色切换（URL theme 参数 + JS 注入兜底）
+- **生成体验优化** — AI 流式生成期间支持自动跟随到底部；用户手动滚动后停止跟随并提供“一键跟随底部”
+- **数据库自迁移增强** — 新增 articles/ai_settings 的安全 ALTER，旧数据自动补齐统计字段
+
+### Bug 修复
+
+- **预览 Sheet detents 编译失败** — 移除不存在的 `SheetSize.FULL`
+- **预览关闭按钮重叠** — 移除自定义关闭按钮，避免与 Sheet 默认关闭按钮叠加
+- **主题枚举判断错误** — 修复 `ColorMode` 深浅色枚举值判断逻辑，预览可正确切换到深色
+- **生成中编辑器滚动异常** — 避免 TextArea 高频刷新导致滚动位置重置，生成时改为只读滚动容器
+
+---
+
 ## HarmonyOS v1.1.0 (2026-04-07)
 
 ### Bug 修复

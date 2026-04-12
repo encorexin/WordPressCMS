@@ -32,6 +32,14 @@ history/*.json
 extension-build/
 extension/icons/*.svg
 
+#开发文档
+doc/HARMONYOS_CODING_STANDARDS.md
+doc/HARMONYOS_OPTIMIZATION.md
+doc/HARMONYOS_UI_COMPONENT_STANDARDS.md
+doc/implementation
+doc/PROJECT_STATUS_REPORT.md
+docs/*
+
 # Android
 android/keystore.properties
 android/app/*.keystore
@@ -55,3 +63,11 @@ harmonyos/build-profile.json5
 harmonyos/local.properties
 *.hap
 *.app
+
+# 杂项
+tmp/*
+scripts/verify-*.mjs
+coverage/*
+.qoder/*
+AGENTS.md
+

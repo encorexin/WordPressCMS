@@ -11,8 +11,13 @@ import {
 } from "@/components/article";
 import { VersionHistoryDialog } from "@/components/common/VersionHistoryDialog";
 import { useAuth } from "@/context/LocalAuthProvider";
-import { getAllAISettings, getEffectiveAISettings, getSlugSettings } from "@/db/aiSettings";
-import type { AISettings, ArticleVersion } from "@/db/database";
+import {
+  getAllAISettings,
+  getEffectiveAISettings,
+  getSlugSettings,
+  type AISettings,
+  type ArticleVersion,
+} from "@/db/api";
 import { downloadSingleArticle } from "@/db/dataExport";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import {
@@ -79,6 +84,7 @@ export default function ArticleEditor() {
   } = useArticlePublisher({
     articleId,
     wpPostId,
+    userId: user?.id,
     onPublished: (postId) => setWpPostId(postId),
     onUpdated: () => navigate("/articles"),
   });

@@ -1,16 +1,16 @@
 // 文章版本表 CRUD
 
 import relationalStore from '@ohos.data.relationalStore'
-import { DatabaseHelper } from './DatabaseHelper'
 import { DatabaseSchema } from '../../constants/DatabaseSchema'
 import { ArticleVersion } from '../../models/ArticleVersion'
 import { generateId } from '../../utils/IdGenerator'
 import { getTimestamp } from '../../utils/DateUtil'
+import { Logger } from '../../utils/Logger'
+import { BaseDao } from './BaseDao'
 
 export class VersionDao {
-  private static getStore(): relationalStore.RdbStore {
-    return DatabaseHelper.getStore()
-  }
+  private static readonly baseDao: BaseDao<ArticleVersion> =
+    new BaseDao<ArticleVersion>(DatabaseSchema.TABLE_VERSIONS, VersionDao.fromResultSet)
 
   static async insert(articleId: string, userId: string, siteId: string,
     title: string, content: string, keywords: string, template: string,
@@ -44,7 +44,7 @@ export class VersionDao {
         'version_number': version.versionNumber,
         'created_at': version.createdAt
       }
-      await VersionDao.getStore().insert(DatabaseSchema.TABLE_VERSIONS, bucket)
+      await VersionDao.baseDao.getStore().insert(DatabaseSchema.TABLE_VERSIONS, bucket)
       return version
     } catch (err) {
       throw new Error(`Failed to insert version: ${String(err)}`)
@@ -52,64 +52,52 @@ export class VersionDao {
   }
 
   static async findByArticleId(articleId: string): Promise<ArticleVersion[]> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_VERSIONS)
       predicates.equalTo('article_id', articleId)
       predicates.orderByDesc('version_number')
-      resultSet = await VersionDao.getStore().query(predicates)
-      const list: ArticleVersion[] = []
-      while (resultSet.goToNextRow()) {
-        list.push(VersionDao.fromResultSet(resultSet))
-      }
-      return list
+      return await VersionDao.baseDao.queryList(predicates, 'VersionDao.findByArticleId')
     } catch (err) {
       throw new Error(`Failed to find versions by article: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
   static async findById(id: string): Promise<ArticleVersion | null> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_VERSIONS)
       predicates.equalTo('id', id)
-      resultSet = await VersionDao.getStore().query(predicates)
-      if (resultSet.goToFirstRow()) {
-        return VersionDao.fromResultSet(resultSet)
-      }
-      return null
+      return await VersionDao.baseDao.queryFirst(predicates, 'VersionDao.findById')
     } catch (err) {
       throw new Error(`Failed to find version by id: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
   static async getNextVersionNumber(articleId: string): Promise<number> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
+      const store = VersionDao.baseDao.getStore()
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_VERSIONS)
       predicates.equalTo('article_id', articleId)
       predicates.orderByDesc('version_number')
       predicates.limitAs(1)
-      resultSet = await VersionDao.getStore().query(predicates)
-      if (resultSet.goToFirstRow()) {
-        const current = resultSet.getLong(resultSet.getColumnIndex('version_number'))
-        return current + 1
+      let resultSet: relationalStore.ResultSet | null = null
+      try {
+        resultSet = await store.query(predicates)
+        if (resultSet.goToFirstRow()) {
+          const current = resultSet.getLong(resultSet.getColumnIndex('version_number'))
+          return current + 1
+        }
+        return 1
+      } finally {
+        if (resultSet !== null) {
+          try {
+            resultSet.close()
+          } catch (closeErr) {
+            Logger.warn('VersionDao.getNextVersionNumber close resultSet failed: %{public}s', String(closeErr))
+          }
+        }
       }
-      return 1
     } catch (err) {
       throw new Error(`Failed to get next version number: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
@@ -117,7 +105,7 @@ export class VersionDao {
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_VERSIONS)
       predicates.equalTo('id', id)
-      await VersionDao.getStore().delete(predicates)
+      await VersionDao.baseDao.getStore().delete(predicates)
     } catch (err) {
       throw new Error(`Failed to delete version by id: ${String(err)}`)
     }
@@ -127,7 +115,7 @@ export class VersionDao {
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_VERSIONS)
       predicates.equalTo('article_id', articleId)
-      await VersionDao.getStore().delete(predicates)
+      await VersionDao.baseDao.getStore().delete(predicates)
     } catch (err) {
       throw new Error(`Failed to delete versions by article: ${String(err)}`)
     }

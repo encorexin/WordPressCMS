@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { AISettings, ArticleTemplate, Topic } from "@/db/database";
+import type { AISettings, ArticleTemplate, Topic } from "@/db/api";
 import type { ArticleFormData } from "@/hooks/useArticleForm";
 
 export interface AIGenerationPanelProps {

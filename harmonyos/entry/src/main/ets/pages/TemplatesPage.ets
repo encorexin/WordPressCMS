@@ -1,12 +1,14 @@
 // 模板管理页面 — 文章生成模板 CRUD
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
 import { ArticleTemplate } from '../models/ArticleTemplate'
 import { TemplateDao } from '../services/db/TemplateDao'
 import { TemplateCardComponent } from '../components/template/TemplateCard'
 import { TemplateFormDialogComponent } from '../components/template/TemplateFormDialog'
 import { Logger } from '../utils/Logger'
 import { UiFeedback } from '../utils/UiFeedback'
+import { BasicDataSource, calcCachedCount } from '../utils/BasicDataSource'
+import { AppStorageKeys } from '../constants/AppStorageKeys'
 
 // 默认模板定义
 class DefaultTemplate {
@@ -116,12 +118,13 @@ const DEFAULT_TEMPLATES: DefaultTemplate[] = [
 @Component
 export struct TemplatesPageContent {
   @Consume('navPathStack') navPathStack: NavPathStack
-  @StorageProp('currentUserId') currentUserId: string = ''
+  @StorageProp(AppStorageKeys.CURRENT_USER_ID) currentUserId: string = ''
 
   @State templates: ArticleTemplate[] = []
   @State isLoading: boolean = true
   @State showFormDialog: boolean = false
   @State editingTemplate: ArticleTemplate | null = null
+  private templateDataSource: BasicDataSource<ArticleTemplate> = new BasicDataSource<ArticleTemplate>([])
 
   aboutToAppear(): void {
     this.loadTemplates()
@@ -199,7 +202,7 @@ export struct TemplatesPageContent {
       },
       secondaryButton: {
         value: '重置',
-        fontColor: Colors.PRIMARY,
+        fontColor: ResourceColors.PRIMARY,
         action: () => {
           this.doResetDefaultTemplates()
         }
@@ -260,7 +263,7 @@ export struct TemplatesPageContent {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor(Colors.BG_PRIMARY)
+        .backgroundColor(ResourceColors.BG_PRIMARY)
 
         // 表单对话框
         if (this.showFormDialog) {
@@ -292,10 +295,10 @@ export struct TemplatesPageContent {
         Text('模板管理')
           .fontSize(Typography.TITLE)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.PRIMARY)
         Text(`共 ${this.templates.length} 个模板`)
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
@@ -305,11 +308,11 @@ export struct TemplatesPageContent {
         Button({ type: ButtonType.Circle }) {
           SymbolGlyph($r('sys.symbol.arrow_counterclockwise'))
             .fontSize(ComponentSize.ICON_SM)
-            .fontColor([Colors.PRIMARY])
+            .fontColor([ResourceColors.PRIMARY])
         }
         .width(40)
         .height(40)
-        .backgroundColor(Colors.BG_SECONDARY)
+        .backgroundColor(ResourceColors.BG_SECONDARY)
         .onClick(() => {
           this.resetDefaultTemplates()
         })
@@ -317,8 +320,8 @@ export struct TemplatesPageContent {
         // 新建按钮
         Button('新建', { type: ButtonType.Capsule })
           .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
-          .backgroundColor(Colors.PRIMARY)
-          .fontColor(Colors.TEXT_ON_PRIMARY)
+          .backgroundColor(ResourceColors.PRIMARY)
+          .fontColor(ResourceColors.TEXT_ON_PRIMARY)
           .fontSize(Typography.BODY)
           .fontWeight(FontWeight.Medium)
           .onClick(() => {
@@ -339,10 +342,10 @@ export struct TemplatesPageContent {
       LoadingProgress()
         .width(48)
         .height(48)
-        .color(Colors.PRIMARY)
+        .color(ResourceColors.PRIMARY)
       Text('加载中...')
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_HINT)
+        .fontColor(ResourceColors.TEXT_HINT)
         .margin({ top: Spacing.SM })
     }
     .width('100%')
@@ -358,23 +361,23 @@ export struct TemplatesPageContent {
     Column({ space: Spacing.BASE }) {
       SymbolGlyph($r('sys.symbol.doc_filled_on_doc'))
         .fontSize(64)
-        .fontColor([Colors.TEXT_HINT])
+        .fontColor([ResourceColors.TEXT_HINT])
         .opacity(0.5)
 
       Text('暂无模板')
         .fontSize(Typography.SUBTITLE)
         .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
 
       Text('创建自定义模板来快速生成文章')
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
         .textAlign(TextAlign.Center)
 
       Button('新建模板', { type: ButtonType.Capsule })
         .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
-        .backgroundColor(Colors.PRIMARY)
-        .fontColor(Colors.TEXT_ON_PRIMARY)
+        .backgroundColor(ResourceColors.PRIMARY)
+        .fontColor(ResourceColors.TEXT_ON_PRIMARY)
         .fontSize(Typography.BODY)
         .fontWeight(FontWeight.Medium)
         .margin({ top: Spacing.SM })
@@ -393,9 +396,9 @@ export struct TemplatesPageContent {
 
   @Builder
   TemplatesList() {
-    Scroll() {
-      Column({ space: Spacing.MD }) {
-        ForEach(this.templates, (template: ArticleTemplate) => {
+    List({ space: Spacing.MD }) {
+      LazyForEach(this.templateDataSource, (template: ArticleTemplate) => {
+        ListItem() {
           TemplateCardComponent({
             template: template,
             onEdit: () => {
@@ -405,13 +408,14 @@ export struct TemplatesPageContent {
               this.confirmDelete(template)
             }
           })
-        }, (template: ArticleTemplate) => template.id)
-      }
-      .width('100%')
-      .padding({ left: Spacing.BASE, right: Spacing.BASE, bottom: Spacing.XL })
+        }
+      }, (template: ArticleTemplate) => template.id)
     }
+    .width('100%')
     .layoutWeight(1)
     .scrollBar(BarState.Off)
+    .padding({ left: Spacing.BASE, right: Spacing.BASE, bottom: Spacing.XL })
+    .cachedCount(calcCachedCount(10))
   }
 
   // ========== 业务逻辑 ==========
@@ -419,6 +423,8 @@ export struct TemplatesPageContent {
   private async loadTemplates(): Promise<void> {
     if (this.currentUserId.length === 0) {
       this.isLoading = false
+      this.templates = []
+      this.templateDataSource.setData(this.templates)
       return
     }
     try {
@@ -426,6 +432,7 @@ export struct TemplatesPageContent {
       // 初始化默认模板（首次使用）
       await this.initDefaultTemplates()
       this.templates = await TemplateDao.findByUserId(this.currentUserId)
+      this.templateDataSource.setData(this.templates)
     } catch (err) {
       Logger.error('Load templates failed: %{public}s', String(err))
       UiFeedback.showToast({ message: '加载模板失败' })
@@ -496,7 +503,7 @@ export struct TemplatesPageContent {
       },
       secondaryButton: {
         value: '删除',
-        fontColor: Colors.ERROR,
+        fontColor: ResourceColors.ERROR,
         action: () => {
           this.handleDelete(template)
         }

@@ -370,6 +370,14 @@ ${article.content}
     }
   }
 
+  static async normalizeImportContent(jsonStr: string): Promise<string> {
+    const encryptedWrapper = DataExportService.parseEncryptedExportWrapper(jsonStr)
+    if (encryptedWrapper === null || !encryptedWrapper.encrypted || encryptedWrapper.payload.length === 0) {
+      return jsonStr
+    }
+    return await DataExportService.decryptImportData(jsonStr)
+  }
+
   static async importData(importData: ExportData, userId: string): Promise<ImportResult> {
     const result = new ImportResult()
 
@@ -600,9 +608,8 @@ ${article.content}
 
   static async decryptImportData(encryptedJson: string): Promise<string> {
     try {
-      const parsed = JSON.parse(encryptedJson) as EncryptedExportWrapper
-
-      if (!parsed.payload) {
+      const parsed = DataExportService.parseEncryptedExportWrapper(encryptedJson)
+      if (parsed === null || parsed.payload.length === 0) {
         throw new Error('Invalid encrypted data: missing payload')
       }
 
@@ -620,5 +627,18 @@ ${article.content}
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
+  }
+
+  private static parseEncryptedExportWrapper(jsonStr: string): EncryptedExportWrapper | null {
+    try {
+      const parsed = JSON.parse(jsonStr) as EncryptedExportWrapper
+      if (parsed.version.length === 0) {
+        return null
+      }
+      return parsed
+    } catch (err) {
+      Logger.debug('Import content is not encrypted wrapper: %{public}s', String(err))
+      return null
+    }
   }
 }

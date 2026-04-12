@@ -37,7 +37,7 @@ import {
     initDefaultTemplates,
     cleanDuplicateTemplates,
     type ArticleTemplate,
-} from "@/db/templateService";
+} from "@/db/api";
 
 export default function Templates() {
     const { user } = useAuth();
@@ -94,10 +94,11 @@ export default function Templates() {
     };
 
     const handleDelete = async (template: ArticleTemplate) => {
+        if (!user?.id) return;
         if (!confirm(`确定要删除模板 "${template.name}" 吗？`)) return;
 
         try {
-            await deleteTemplate(template.id);
+            await deleteTemplate(user.id, template.id);
             toast.success("模板已删除");
             await loadTemplates();
         } catch (error) {
@@ -117,7 +118,7 @@ export default function Templates() {
             setSaving(true);
 
             if (editingTemplate) {
-                await updateTemplate(editingTemplate.id, formData);
+                await updateTemplate(user.id, editingTemplate.id, formData);
                 toast.success("模板已更新");
             } else {
                 await createTemplate(user.id, formData);

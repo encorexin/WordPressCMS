@@ -1,19 +1,23 @@
 // 用户管理页面 — 对标 React Admin.tsx
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
 import { User } from '../models/User'
 import { UserDao } from '../services/db/UserDao'
 import { Logger } from '../utils/Logger'
 import { UiFeedback } from '../utils/UiFeedback'
+import { AppStorageKeys, UserRole } from '../constants/AppStorageKeys'
+import { BasicDataSource, calcCachedCount } from '../utils/BasicDataSource'
+
 
 @Component
 export struct AdminPageContent {
   @Consume('navPathStack') navPathStack: NavPathStack
-  @StorageProp('currentUserId') currentUserId: string = ''
-  @StorageProp('currentUserRole') currentUserRole: string = 'user'
+  @StorageProp(AppStorageKeys.CURRENT_USER_ID) currentUserId: string = ''
+  @StorageProp(AppStorageKeys.CURRENT_USER_ROLE) currentUserRole: UserRole = UserRole.User
 
   @State users: User[] = []
   @State isLoading: boolean = true
+  private userDataSource: BasicDataSource<User> = new BasicDataSource<User>()
 
   aboutToAppear(): void {
     this.loadUsers()
@@ -29,7 +33,7 @@ export struct AdminPageContent {
           this.ToolbarArea()
 
           // 内容区
-          if (this.currentUserRole !== 'admin') {
+          if (this.currentUserRole !== UserRole.Admin) {
             this.AccessDeniedView()
           } else if (this.isLoading) {
             this.LoadingView()
@@ -41,7 +45,7 @@ export struct AdminPageContent {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor(Colors.BG_PRIMARY)
+        .backgroundColor(ResourceColors.BG_PRIMARY)
       }
       .width('100%')
       .height('100%')
@@ -59,10 +63,10 @@ export struct AdminPageContent {
         Text('用户管理')
           .fontSize(Typography.TITLE)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.PRIMARY)
+          .fontColor(ResourceColors.PRIMARY)
         Text(`共 ${this.users.length} 位用户`)
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
@@ -84,10 +88,10 @@ export struct AdminPageContent {
       LoadingProgress()
         .width(48)
         .height(48)
-        .color(Colors.PRIMARY)
+        .color(ResourceColors.PRIMARY)
       Text('加载中...')
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_HINT)
+        .fontColor(ResourceColors.TEXT_HINT)
         .margin({ top: Spacing.SM })
     }
     .width('100%')
@@ -103,17 +107,17 @@ export struct AdminPageContent {
     Column({ space: Spacing.BASE }) {
       SymbolGlyph($r('sys.symbol.person_2'))
         .fontSize(64)
-        .fontColor([Colors.TEXT_HINT])
+        .fontColor([ResourceColors.TEXT_HINT])
         .opacity(0.5)
 
       Text('暂无用户')
         .fontSize(Typography.SUBTITLE)
         .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
 
       Text('系统中没有任何用户数据')
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
     }
     .width('100%')
     .layoutWeight(1)
@@ -129,23 +133,23 @@ export struct AdminPageContent {
     Column({ space: Spacing.BASE }) {
       SymbolGlyph($r('sys.symbol.xmark'))
         .fontSize(64)
-        .fontColor([Colors.ERROR])
+        .fontColor([ResourceColors.ERROR])
         .opacity(0.5)
 
       Text('无权访问')
         .fontSize(Typography.SUBTITLE)
         .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
 
       Text('仅管理员可以访问此页面')
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
 
       Button('返回', { type: ButtonType.Capsule })
         .width(120)
         .height(ComponentSize.BUTTON_HEIGHT)
-        .backgroundColor(Colors.PRIMARY)
-        .fontColor(Colors.TEXT_ON_PRIMARY)
+        .backgroundColor(ResourceColors.PRIMARY)
+        .fontColor(ResourceColors.TEXT_ON_PRIMARY)
         .fontSize(Typography.BODY)
         .margin({ top: Spacing.MD })
         .onClick(() => {
@@ -163,17 +167,17 @@ export struct AdminPageContent {
 
   @Builder
   UserList() {
-    Scroll() {
-      Column({ space: Spacing.MD }) {
-        ForEach(this.users, (user: User) => {
+    List({ space: Spacing.MD }) {
+      LazyForEach(this.userDataSource, (user: User) => {
+        ListItem() {
           this.UserCard(user)
-        }, (user: User) => user.id)
-      }
-      .width('100%')
-      .padding({ left: Spacing.BASE, right: Spacing.BASE, bottom: Spacing.XL })
+        }
+      }, (user: User) => user.id)
     }
     .layoutWeight(1)
     .scrollBar(BarState.Off)
+    .cachedCount(calcCachedCount(8))
+    .padding({ left: Spacing.BASE, right: Spacing.BASE, bottom: Spacing.XL })
   }
 
   @Builder
@@ -184,11 +188,11 @@ export struct AdminPageContent {
         Row({ space: Spacing.SM }) {
           SymbolGlyph($r('sys.symbol.person_2'))
             .fontSize(ComponentSize.ICON_MD)
-            .fontColor([Colors.PRIMARY])
+            .fontColor([ResourceColors.PRIMARY])
 
           Text(user.email)
             .fontSize(Typography.BODY_LARGE)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .fontWeight(FontWeight.Medium)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -203,11 +207,11 @@ export struct AdminPageContent {
       Row({ space: Spacing.MD }) {
         Text(`ID: ${user.id.substring(0, 8)}`)
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_HINT)
 
         Text(`注册于: ${this.formatDate(user.createdAt)}`)
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_HINT)
       }
       .width('100%')
 
@@ -216,15 +220,15 @@ export struct AdminPageContent {
         if (user.id === this.currentUserId) {
           Text('当前用户')
             .fontSize(Typography.CAPTION)
-            .fontColor(Colors.PRIMARY)
+            .fontColor(ResourceColors.PRIMARY)
             .padding({ left: Spacing.SM, right: Spacing.SM, top: 4, bottom: 4 })
             .borderRadius(Radius.SM)
-            .backgroundColor('#E8F3FF')
+            .backgroundColor(ResourceColors.INFO_SOFT_BG)
         } else {
           Button(user.role === 'admin' ? '设为普通用户' : '设为管理员', { type: ButtonType.Capsule })
             .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
-            .backgroundColor(Colors.BG_SECONDARY)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .backgroundColor(ResourceColors.BG_SECONDARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .fontSize(Typography.BODY)
             .onClick(() => {
               this.confirmToggleRole(user)
@@ -232,8 +236,8 @@ export struct AdminPageContent {
 
           Button('删除', { type: ButtonType.Capsule })
             .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
-            .backgroundColor(Colors.ERROR)
-            .fontColor(Colors.TEXT_ON_PRIMARY)
+            .backgroundColor(ResourceColors.ERROR)
+            .fontColor(ResourceColors.TEXT_ON_PRIMARY)
             .fontSize(Typography.BODY)
             .onClick(() => {
               this.confirmDeleteUser(user)
@@ -248,7 +252,7 @@ export struct AdminPageContent {
     .width('100%')
     .padding(Spacing.BASE)
     .borderRadius(Radius.LG)
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
   }
 
   @Builder
@@ -257,25 +261,25 @@ export struct AdminPageContent {
       Row({ space: Spacing.XS }) {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(12)
-          .fontColor([Colors.TEXT_ON_PRIMARY])
+          .fontColor([ResourceColors.TEXT_ON_PRIMARY])
 
         Text('管理员')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_ON_PRIMARY)
+          .fontColor(ResourceColors.TEXT_ON_PRIMARY)
           .fontWeight(FontWeight.Medium)
       }
       .padding({ left: Spacing.SM, right: Spacing.SM, top: 4, bottom: 4 })
       .borderRadius(Radius.FULL)
-      .backgroundColor(Colors.PRIMARY)
+      .backgroundColor(ResourceColors.PRIMARY)
     } else {
       Text('普通用户')
         .fontSize(Typography.CAPTION)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
         .padding({ left: Spacing.SM, right: Spacing.SM, top: 4, bottom: 4 })
         .borderRadius(Radius.FULL)
-        .backgroundColor(Colors.BG_PRIMARY)
+        .backgroundColor(ResourceColors.BG_PRIMARY)
         .borderWidth(1)
-        .borderColor(Colors.BORDER)
+        .borderColor(ResourceColors.BORDER)
     }
   }
 
@@ -290,6 +294,7 @@ export struct AdminPageContent {
     this.isLoading = true
     try {
       this.users = await UserDao.findAll()
+      this.userDataSource.setData(this.users)
     } catch (err) {
       Logger.error('Load users failed: %{public}s', String(err))
       UiFeedback.showToast({ message: '加载用户列表失败' })
@@ -317,7 +322,7 @@ export struct AdminPageContent {
       },
       secondaryButton: {
         value: '确认更改',
-        fontColor: Colors.PRIMARY,
+        fontColor: ResourceColors.PRIMARY,
         action: () => {
           this.handleToggleRole(user.id, newRole)
         }
@@ -352,7 +357,7 @@ export struct AdminPageContent {
       },
       secondaryButton: {
         value: '确认删除',
-        fontColor: Colors.ERROR,
+        fontColor: ResourceColors.ERROR,
         action: () => {
           this.handleDeleteUser(user.id)
         }

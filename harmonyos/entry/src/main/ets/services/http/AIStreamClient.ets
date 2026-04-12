@@ -3,8 +3,44 @@
 import http from '@ohos.net.http'
 import util from '@ohos.util'
 import { HttpClient } from './HttpClient'
-import { SSEParser, extractDeltaContent } from '../../utils/SSEParser'
+import { SSEParser, extractDeltaContent, extractUsageTotalTokens } from '../../utils/SSEParser'
 import { Logger } from '../../utils/Logger'
+
+interface ChatMessagePayload {
+  role: string
+  content: string
+}
+
+interface StreamRequestPayload {
+  messages: ChatMessagePayload[]
+  stream: boolean
+  model?: string
+}
+
+interface OnceRequestPayload extends StreamRequestPayload {
+  max_tokens: number
+  temperature: number
+}
+
+interface AICompletionMessagePayload {
+  content?: string
+}
+
+interface AICompletionChoicePayload {
+  message?: AICompletionMessagePayload
+}
+
+interface AICompletionResponsePayload {
+  choices?: AICompletionChoicePayload[]
+}
+
+interface AIModelPayload {
+  id?: string
+}
+
+interface AIModelsResponsePayload {
+  data?: AIModelPayload[]
+}
 
 // 聊天消息
 export class ChatMessage {
@@ -19,6 +55,7 @@ export class StreamOptions {
   model: string = ''
   messages: ChatMessage[] = []
   onUpdate: (content: string) => void = () => {}
+  onUsage: (totalTokens: number) => void = () => {}
   onComplete: () => void = () => {}
   onError: (error: string) => void = () => {}
 }
@@ -29,6 +66,7 @@ export class AIStreamClient {
   static sendStream(options: StreamOptions): http.HttpRequest {
     let currentContent = ''
     const parser = new SSEParser()
+    let latestTotalTokens = 0
 
     // 构建请求头
     const headers: Record<string, string> = {}
@@ -74,6 +112,11 @@ export class AIStreamClient {
             continue
           }
           const delta = extractDeltaContent(event.data)
+          const totalTokens = extractUsageTotalTokens(event.data)
+          if (totalTokens > 0 && totalTokens !== latestTotalTokens) {
+            latestTotalTokens = totalTokens
+            options.onUsage(totalTokens)
+          }
           if (delta.length > 0) {
             currentContent += delta
             options.onUpdate(currentContent)
@@ -113,22 +156,22 @@ export class AIStreamClient {
     model: string,
     messages: ChatMessage[]
   ): Promise<string> {
-    const messagesArr: Record<string, string>[] = []
+    const messagesArr: ChatMessagePayload[] = []
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i]
-      const item: Record<string, string> = {
-        'role': msg.role,
-        'content': msg.content
+      const item: ChatMessagePayload = {
+        role: msg.role,
+        content: msg.content
       }
       messagesArr.push(item)
     }
 
-    const bodyObj: Record<string, Object> = {
-      'messages': messagesArr,
-      'model': model.length > 0 ? model : 'gpt-3.5-turbo',
-      'stream': false,
-      'max_tokens': 1000,
-      'temperature': 0.3
+    const bodyObj: OnceRequestPayload = {
+      messages: messagesArr,
+      model: model.length > 0 ? model : 'gpt-3.5-turbo',
+      stream: false,
+      max_tokens: 1000,
+      temperature: 0.3
     }
 
     const headers: Record<string, string> = {}
@@ -141,28 +184,7 @@ export class AIStreamClient {
       throw new Error(`AI request failed: ${response.code}`)
     }
 
-    try {
-      const parsed: Record<string, Object> = JSON.parse(response.data) as Record<string, Object>
-      if (parsed['choices'] === undefined || parsed['choices'] === null) {
-        return ''
-      }
-      const choices = parsed['choices'] as Record<string, Object>[]
-      if (!Array.isArray(choices) || choices.length === 0) {
-        return ''
-      }
-      const message = choices[0]['message']
-      if (message === undefined || message === null || typeof message !== 'object') {
-        return ''
-      }
-      const content = (message as Record<string, string>)['content']
-      if (typeof content === 'string') {
-        return content.trim()
-      }
-    } catch (_err) {
-      return ''
-    }
-
-    return ''
+    return AIStreamClient.parseCompletionContent(response.data)
   }
 
   // 生成 SEO slug
@@ -237,23 +259,45 @@ export class AIStreamClient {
       throw new Error(`Failed to fetch models: ${response.code}`)
     }
 
+    return AIStreamClient.parseModelIds(response.data)
+  }
+
+  private static parseCompletionContent(responseData: string): string {
     try {
-      const parsed: Record<string, Object> = JSON.parse(response.data) as Record<string, Object>
-      if (parsed['data'] === undefined || parsed['data'] === null) {
+      const parsed = JSON.parse(responseData) as AICompletionResponsePayload
+      if (!Array.isArray(parsed.choices) || parsed.choices.length === 0) {
+        return ''
+      }
+      const firstChoice = parsed.choices[0]
+      if (firstChoice.message === undefined) {
+        return ''
+      }
+      if (typeof firstChoice.message.content === 'string') {
+        return firstChoice.message.content.trim()
+      }
+      return ''
+    } catch (parseErr) {
+      Logger.warn('AIStreamClient.sendOnce parse failed: %{public}s', String(parseErr))
+      return ''
+    }
+  }
+
+  private static parseModelIds(responseData: string): string[] {
+    try {
+      const parsed = JSON.parse(responseData) as AIModelsResponsePayload
+      if (!Array.isArray(parsed.data)) {
         return []
       }
-      const data = parsed['data'] as Record<string, Object>[]
       const models: string[] = []
-      if (Array.isArray(data)) {
-        for (let i = 0; i < data.length; i++) {
-          const modelId = data[i]['id']
-          if (typeof modelId === 'string' && modelId.length > 0) {
-            models.push(modelId)
-          }
+      for (let i = 0; i < parsed.data.length; i++) {
+        const modelId = parsed.data[i].id
+        if (typeof modelId === 'string' && modelId.length > 0) {
+          models.push(modelId)
         }
       }
       return models
-    } catch (_err) {
+    } catch (parseErr) {
+      Logger.warn('AIStreamClient.fetchModels parse failed: %{public}s', String(parseErr))
       return []
     }
   }

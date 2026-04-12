@@ -1,6 +1,6 @@
 // 登录/注册页面 — 对标 React Login.tsx
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
 import { AuthService, AuthResult } from '../services/auth/AuthService'
 import { Logger } from '../utils/Logger'
 import { isValidEmail } from '../utils/Sanitizer'
@@ -41,21 +41,21 @@ export struct LoginPageContent {
         Text('WordPress CMS')
           .fontSize(Typography.TITLE)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.PRIMARY)
+          .fontColor(ResourceColors.PRIMARY)
           .margin({ top: Spacing.MD })
 
         Text('登录以继续使用')
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
           .margin({ top: Spacing.XS })
 
         Row() {
           SymbolGlyph($r('sys.symbol.lock_shield'))
             .fontSize(Typography.CAPTION)
-            .fontColor([Colors.TEXT_HINT])
+            .fontColor([ResourceColors.TEXT_HINT])
           Text('数据存储在本地，不上传服务器')
             .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_HINT)
+            .fontColor(ResourceColors.TEXT_HINT)
             .margin({ left: Spacing.XS })
         }
         .margin({ top: Spacing.SM })
@@ -69,12 +69,12 @@ export struct LoginPageContent {
         Text('登录')
           .fontSize(Typography.BODY_LARGE)
           .fontWeight(this.activeTab === 0 ? FontWeight.Medium : FontWeight.Regular)
-          .fontColor(this.activeTab === 0 ? Colors.PRIMARY : Colors.TEXT_SECONDARY)
+          .fontColor(this.activeTab === 0 ? ResourceColors.PRIMARY : ResourceColors.TEXT_SECONDARY)
           .textAlign(TextAlign.Center)
           .layoutWeight(1)
           .padding({ top: Spacing.MD, bottom: Spacing.MD })
           .borderWidth({ bottom: 2 })
-          .borderColor(this.activeTab === 0 ? Colors.PRIMARY : 'transparent')
+          .borderColor(this.activeTab === 0 ? ResourceColors.PRIMARY : 'transparent')
           .onClick(() => {
             if (!this.isLoading) {
               this.activeTab = 0
@@ -84,12 +84,12 @@ export struct LoginPageContent {
         Text('注册')
           .fontSize(Typography.BODY_LARGE)
           .fontWeight(this.activeTab === 1 ? FontWeight.Medium : FontWeight.Regular)
-          .fontColor(this.activeTab === 1 ? Colors.PRIMARY : Colors.TEXT_SECONDARY)
+          .fontColor(this.activeTab === 1 ? ResourceColors.PRIMARY : ResourceColors.TEXT_SECONDARY)
           .textAlign(TextAlign.Center)
           .layoutWeight(1)
           .padding({ top: Spacing.MD, bottom: Spacing.MD })
           .borderWidth({ bottom: 2 })
-          .borderColor(this.activeTab === 1 ? Colors.PRIMARY : 'transparent')
+          .borderColor(this.activeTab === 1 ? ResourceColors.PRIMARY : 'transparent')
           .onClick(() => {
             if (!this.isLoading) {
               this.activeTab = 1
@@ -109,7 +109,7 @@ export struct LoginPageContent {
     .width('100%')
     .height('100%')
     .padding({ left: Spacing.LG, right: Spacing.LG })
-    .backgroundColor(Colors.BG_PRIMARY)
+    .backgroundColor(ResourceColors.BG_PRIMARY)
   }
 
   @Builder
@@ -119,17 +119,17 @@ export struct LoginPageContent {
       Column({ space: Spacing.XS }) {
         Text('邮箱')
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
           .fontWeight(FontWeight.Medium)
         TextInput({ placeholder: '请输入邮箱', text: this.loginEmail })
           .type(InputType.Email)
           .height(ComponentSize.INPUT_HEIGHT)
           .borderRadius(Radius.MD)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .padding({ left: Spacing.BASE, right: Spacing.BASE })
           .fontSize(Typography.BODY_LARGE)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .enabled(!this.isLoading)
           .onChange((value: string) => {
             this.loginEmail = value
@@ -142,17 +142,17 @@ export struct LoginPageContent {
       Column({ space: Spacing.XS }) {
         Text('密码')
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
           .fontWeight(FontWeight.Medium)
         TextInput({ placeholder: '请输入密码', text: this.loginPassword })
           .type(InputType.Password)
           .height(ComponentSize.INPUT_HEIGHT)
           .borderRadius(Radius.MD)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .padding({ left: Spacing.BASE, right: Spacing.BASE })
           .fontSize(Typography.BODY_LARGE)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .enabled(!this.isLoading)
           .onChange((value: string) => {
             this.loginPassword = value
@@ -165,8 +165,8 @@ export struct LoginPageContent {
       Button(this.isLoading ? '登录中...' : '登录', { type: ButtonType.Capsule })
         .width('100%')
         .height(ComponentSize.BUTTON_HEIGHT)
-        .backgroundColor(Colors.PRIMARY)
-        .fontColor(Colors.TEXT_ON_PRIMARY)
+        .backgroundColor(ResourceColors.PRIMARY)
+        .fontColor(ResourceColors.TEXT_ON_PRIMARY)
         .fontSize(Typography.BODY_LARGE)
         .fontWeight(FontWeight.Medium)
         .enabled(!this.isLoading)
@@ -185,17 +185,17 @@ export struct LoginPageContent {
       Column({ space: Spacing.XS }) {
         Text('邮箱')
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
           .fontWeight(FontWeight.Medium)
         TextInput({ placeholder: '请输入邮箱', text: this.registerEmail })
           .type(InputType.Email)
           .height(ComponentSize.INPUT_HEIGHT)
           .borderRadius(Radius.MD)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .padding({ left: Spacing.BASE, right: Spacing.BASE })
           .fontSize(Typography.BODY_LARGE)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .enabled(!this.isLoading)
           .onChange((value: string) => {
             this.registerEmail = value
@@ -208,17 +208,17 @@ export struct LoginPageContent {
       Column({ space: Spacing.XS }) {
         Text('密码')
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
           .fontWeight(FontWeight.Medium)
         TextInput({ placeholder: '请输入密码（至少6位）', text: this.registerPassword })
           .type(InputType.Password)
           .height(ComponentSize.INPUT_HEIGHT)
           .borderRadius(Radius.MD)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .padding({ left: Spacing.BASE, right: Spacing.BASE })
           .fontSize(Typography.BODY_LARGE)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .enabled(!this.isLoading)
           .onChange((value: string) => {
             this.registerPassword = value
@@ -231,17 +231,17 @@ export struct LoginPageContent {
       Column({ space: Spacing.XS }) {
         Text('确认密码')
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
           .fontWeight(FontWeight.Medium)
         TextInput({ placeholder: '请再次输入密码', text: this.confirmPassword })
           .type(InputType.Password)
           .height(ComponentSize.INPUT_HEIGHT)
           .borderRadius(Radius.MD)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .padding({ left: Spacing.BASE, right: Spacing.BASE })
           .fontSize(Typography.BODY_LARGE)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .enabled(!this.isLoading)
           .onChange((value: string) => {
             this.confirmPassword = value
@@ -254,8 +254,8 @@ export struct LoginPageContent {
       Button(this.isLoading ? '注册中...' : '注册', { type: ButtonType.Capsule })
         .width('100%')
         .height(ComponentSize.BUTTON_HEIGHT)
-        .backgroundColor(Colors.PRIMARY)
-        .fontColor(Colors.TEXT_ON_PRIMARY)
+        .backgroundColor(ResourceColors.PRIMARY)
+        .fontColor(ResourceColors.TEXT_ON_PRIMARY)
         .fontSize(Typography.BODY_LARGE)
         .fontWeight(FontWeight.Medium)
         .enabled(!this.isLoading)

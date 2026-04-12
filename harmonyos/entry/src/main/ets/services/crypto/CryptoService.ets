@@ -9,6 +9,7 @@ const PBKDF2_ITERATIONS: number = 100000
 const SALT_LENGTH: number = 16
 const IV_LENGTH: number = 12
 const KEY_LENGTH: number = 256
+const FIELD_ENCRYPTION_PREFIX: string = 'enc:v1:'
 
 // 加密数据格式（JSON 序列化存入数据库字段）
 export class EncryptedData {
@@ -165,18 +166,79 @@ export class CryptoService {
 
   // 判断字符串是否为加密数据
   static isEncrypted(value: string): boolean {
-    try {
-      const parsed: Record<string, Object> = JSON.parse(value)
-      return typeof parsed['salt'] === 'string'
-        && typeof parsed['iv'] === 'string'
-        && typeof parsed['data'] === 'string'
-        && typeof parsed['version'] === 'number'
-    } catch (_e) {
+    return CryptoService.parseEncryptedData(value) !== null
+  }
+
+  // 判断字段值是否已经是密文
+  static isFieldEncrypted(value: string): boolean {
+    if (value.length === 0) {
       return false
     }
+    if (value.startsWith(FIELD_ENCRYPTION_PREFIX)) {
+      return true
+    }
+    return CryptoService.isEncrypted(value)
+  }
+
+  // 字段级加密：新写入统一追加前缀，历史密文保持兼容
+  static async encryptField(value: string, password?: string): Promise<string> {
+    if (value.length === 0) {
+      return ''
+    }
+    if (value.startsWith(FIELD_ENCRYPTION_PREFIX)) {
+      return value
+    }
+    if (CryptoService.isEncrypted(value)) {
+      try {
+        const plainText = await CryptoService.decrypt(value, password)
+        const encrypted = await CryptoService.encrypt(plainText, password)
+        return `${FIELD_ENCRYPTION_PREFIX}${encrypted}`
+      } catch (err) {
+        Logger.warn('Legacy encrypted field rewrite skipped: %{public}s', String(err))
+        return value
+      }
+    }
+    const encrypted = await CryptoService.encrypt(value, password)
+    return `${FIELD_ENCRYPTION_PREFIX}${encrypted}`
+  }
+
+  // 字段级解密：兼容新前缀密文、旧 JSON 密文和历史明文
+  static async decryptField(value: string, password?: string): Promise<string> {
+    if (value.length === 0) {
+      return ''
+    }
+    if (value.startsWith(FIELD_ENCRYPTION_PREFIX)) {
+      const payload = value.substring(FIELD_ENCRYPTION_PREFIX.length)
+      return await CryptoService.decryptFieldPayload(value, payload, password)
+    }
+    if (CryptoService.isEncrypted(value)) {
+      return await CryptoService.decryptFieldPayload(value, value, password)
+    }
+    return value
   }
 
   // ===== 内部工具 =====
+
+  private static parseEncryptedData(value: string): EncryptedData | null {
+    try {
+      const parsed = JSON.parse(value) as EncryptedData
+      if (parsed.salt.length === 0 || parsed.iv.length === 0 || parsed.data.length === 0) {
+        return null
+      }
+      return parsed
+    } catch (_err) {
+      return null
+    }
+  }
+
+  private static async decryptFieldPayload(originalValue: string, payload: string, password?: string): Promise<string> {
+    try {
+      return await CryptoService.decrypt(payload, password)
+    } catch (err) {
+      Logger.warn('Field decryption fallback to stored value: %{public}s', String(err))
+      return originalValue
+    }
+  }
 
   private static async pbkdf2(password: string, salt: Uint8Array): Promise<Uint8Array> {
     try {

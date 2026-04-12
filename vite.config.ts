@@ -41,6 +41,11 @@ window.addEventListener('unhandledrejection',function(e){document.title='REJ:'+e
   preview: {
     port: 4173,
   },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+  },
   build: {
     target: 'es2020',
     cssCodeSplit: true,

@@ -63,8 +63,9 @@ import {
     getDataStats,
     TABLE_NAMES,
     type ExportData,
+    type ExportDataPlain,
+    type ExportTableName,
 } from "@/db/dataExport";
-import { db } from "@/db/database";
 import { useAuth } from "@/context/LocalAuthProvider";
 import { hasEncryptionKey } from "@/db/encryptedDatabase";
 
@@ -78,6 +79,18 @@ export default function DataManagement() {
     const [showImportDialog, setShowImportDialog] = useState(false);
     const [pendingImportData, setPendingImportData] = useState<ExportData | null>(null);
     const [encryptExport, setEncryptExport] = useState(true); // 默认加密导出
+
+    const isExportDataPlain = (data: unknown): data is ExportDataPlain => {
+        if (!data || typeof data !== "object") return false;
+        return (
+            "users" in data &&
+            "articles" in data &&
+            "wordpress_sites" in data &&
+            "article_templates" in data &&
+            "keywords" in data &&
+            "topics" in data
+        );
+    };
 
     useEffect(() => {
         loadStats();
@@ -120,7 +133,11 @@ export default function DataManagement() {
         }
     };
 
-    const handleExportTable = async (tableName: string, format: 'json' | 'csv', encrypted: boolean = false) => {
+    const handleExportTable = async <K extends ExportTableName>(
+        tableName: K,
+        format: 'json' | 'csv',
+        encrypted: boolean = false
+    ) => {
         try {
             setExporting(true);
 
@@ -133,7 +150,7 @@ export default function DataManagement() {
                 // 明文导出
                 const data = await exportTableData(tableName, user?.id);
                 if (format === 'csv') {
-                    exportToCSV(data.data, tableName);
+                    exportToCSV<Record<string, unknown>>(data.data as unknown as Record<string, unknown>[], tableName);
                 } else {
                     downloadExportFile(data);
                 }
@@ -549,18 +566,18 @@ export default function DataManagement() {
                         <AlertDialogTitle>确认导入数据</AlertDialogTitle>
                         <AlertDialogDescription>
                             导入将会覆盖现有的所有数据。此操作无法撤销。
-                            {pendingImportData && (
+                            {pendingImportData && !pendingImportData.encrypted && isExportDataPlain(pendingImportData.data) && (
                                 <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm">
                                     <p className="font-medium mb-2">备份文件信息：</p>
                                     <p>导出时间：{new Date(pendingImportData.exportedAt).toLocaleString()}</p>
                                     <p>版本：{pendingImportData.version}</p>
                                     <p className="mt-2">
-                                        包含：{pendingImportData.data.users?.length || 0} 用户,{" "}
-                                        {pendingImportData.data.articles?.length || 0} 文章,{" "}
-                                        {pendingImportData.data.wordpress_sites?.length || 0} 站点,{" "}
-                                        {pendingImportData.data.article_templates?.length || 0} 模板,{" "}
-                                        {pendingImportData.data.keywords?.length || 0} 关键词,{" "}
-                                        {pendingImportData.data.topics?.length || 0} 主题
+                                        包含：{pendingImportData.data.users.length} 用户,{" "}
+                                        {pendingImportData.data.articles.length} 文章,{" "}
+                                        {pendingImportData.data.wordpress_sites.length} 站点,{" "}
+                                        {pendingImportData.data.article_templates.length} 模板,{" "}
+                                        {pendingImportData.data.keywords.length} 关键词,{" "}
+                                        {pendingImportData.data.topics.length} 主题
                                     </p>
                                 </div>
                             )}

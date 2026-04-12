@@ -1,5 +1,24 @@
 // SSE 事件流解析器 — 解析 AI 流式响应的 data: 行
 
+import { Logger } from './Logger'
+
+interface SSEDeltaPayload {
+  content?: string
+}
+
+interface SSEChoicePayload {
+  delta?: SSEDeltaPayload
+}
+
+interface SSEUsagePayload {
+  total_tokens?: number | string
+}
+
+interface SSEPayload {
+  choices?: SSEChoicePayload[]
+  usage?: SSEUsagePayload
+}
+
 export class SSEEvent {
   event: string = ''
   data: string = ''
@@ -14,6 +33,7 @@ export class SSEParser {
   parse(chunk: string): SSEEvent[] {
     this.buffer += chunk
     if (this.buffer.length > SSEParser.MAX_BUFFER_SIZE) {
+      Logger.warn('SSEParser.parse buffer overflow: %{public}s', String(this.buffer.length))
       this.buffer = ''
       return []
     }
@@ -63,25 +83,41 @@ export function extractDeltaContent(data: string): string {
   if (data === '[DONE]') {
     return ''
   }
-  try {
-    const parsed: Record<string, Object> = JSON.parse(data) as Record<string, Object>
-    if (parsed['choices'] === undefined || parsed['choices'] === null) {
-      return ''
-    }
-    const choices = parsed['choices'] as Record<string, Object>[]
-    if (!Array.isArray(choices) || choices.length === 0) {
-      return ''
-    }
-    const delta = choices[0]['delta']
-    if (delta === undefined || delta === null || typeof delta !== 'object') {
-      return ''
-    }
-    const content = (delta as Record<string, string>)['content']
-    if (typeof content !== 'string') {
-      return ''
-    }
-    return content
-  } catch (_err) {
+  const parsed = parsePayload(data)
+  if (parsed === null || !Array.isArray(parsed.choices) || parsed.choices.length === 0) {
     return ''
+  }
+  const firstChoice = parsed.choices[0]
+  if (firstChoice.delta === undefined || typeof firstChoice.delta.content !== 'string') {
+    return ''
+  }
+  return firstChoice.delta.content
+}
+
+export function extractUsageTotalTokens(data: string): number {
+  if (data === '[DONE]') {
+    return 0
+  }
+  const parsed = parsePayload(data)
+  if (parsed === null || parsed.usage === undefined) {
+    return 0
+  }
+  const total = parsed.usage.total_tokens
+  if (typeof total === 'number') {
+    return total
+  }
+  if (typeof total === 'string') {
+    const n = Number(total)
+    return Number.isFinite(n) ? n : 0
+  }
+  return 0
+}
+
+function parsePayload(data: string): SSEPayload | null {
+  try {
+    return JSON.parse(data) as SSEPayload
+  } catch (parseErr) {
+    Logger.debug('SSEParser.parsePayload skipped malformed chunk: %{public}s', String(parseErr))
+    return null
   }
 }

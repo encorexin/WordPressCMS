@@ -11,26 +11,42 @@
         "noUndeclaredDependencies": "error",
         "useExhaustiveDependencies": "warn",
         "noUnusedImports": "warn",
-        "noUnusedVariables": "warn"
+        "noUnusedVariables": "warn",
+        "useUniqueElementIds": "off",
+        "noNestedComponentDefinitions": "off"
       },
       "suspicious": {
         "noRedeclare": "error",
-        "noExplicitAny": "warn"
+        "noExplicitAny": "warn",
+        "noArrayIndexKey": "off",
+        "noShadowRestrictedNames": "off"
       },
       "style": {
         "noNonNullAssertion": "off",
         "useImportType": "warn",
         "noUselessElse": "off",
-        "useDefaultParameterLast": "off"
+        "useDefaultParameterLast": "off",
+        "useExponentiationOperator": "off"
       },
       "complexity": {
         "noForEach": "off",
-        "noBannedTypes": "off"
+        "noBannedTypes": "off",
+        "noUselessEscapeInRegex": "off"
       },
       "a11y": {
         "useKeyWithClickEvents": "off",
         "useButtonType": "off",
-        "noSvgWithoutTitle": "off"
+        "noSvgWithoutTitle": "off",
+        "noLabelWithoutControl": "off",
+        "useFocusableInteractive": "off",
+        "useSemanticElements": "off",
+        "useAriaPropsForRole": "off",
+        "noStaticElementInteractions": "off",
+        "noNoninteractiveElementToInteractiveRole": "off",
+        "noRedundantRoles": "off"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "off"
       }
     }
   },

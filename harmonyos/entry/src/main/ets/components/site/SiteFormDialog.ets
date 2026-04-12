@@ -1,6 +1,6 @@
 // 站点表单对话框组件 — 提取自 SitesPage.ets
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
 import { WordPressSite } from '../../models/WordPressSite'
 
 @Component
@@ -51,7 +51,7 @@ export struct SiteFormDialogComponent {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ResourceColors.OVERLAY_MASK)
         .onClick(() => {
           if (!this.isSubmitting) {
             this.onClose()
@@ -65,11 +65,11 @@ export struct SiteFormDialogComponent {
           Text(this.editingSite !== null ? '编辑站点' : '添加 WordPress 站点')
             .fontSize(Typography.SUBTITLE)
             .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .layoutWeight(1)
           SymbolGlyph($r('sys.symbol.xmark'))
             .fontSize(ComponentSize.ICON_MD)
-            .fontColor([Colors.TEXT_HINT])
+            .fontColor([ResourceColors.TEXT_HINT])
             .accessibilityText('关闭')
             .onClick(() => {
               if (!this.isSubmitting) {
@@ -81,22 +81,22 @@ export struct SiteFormDialogComponent {
 
         Text('填写 WordPress 网站的连接信息，应用程序密码可在 WordPress 后台生成')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
 
         // 站点名称
         Column({ space: Spacing.XS }) {
           Text('站点名称')
             .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .fontWeight(FontWeight.Medium)
           TextInput({ placeholder: '我的 WordPress 站点', text: this.formSiteName })
             .height(ComponentSize.INPUT_HEIGHT)
             .borderRadius(Radius.MD)
-            .backgroundColor(Colors.BG_SECONDARY)
+            .backgroundColor(ResourceColors.BG_SECONDARY)
             .padding({ left: Spacing.BASE, right: Spacing.BASE })
             .fontSize(Typography.BODY_LARGE)
-            .fontColor(Colors.TEXT_PRIMARY)
-            .placeholderColor(Colors.TEXT_HINT)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
+            .placeholderColor(ResourceColors.TEXT_HINT)
             .enabled(!this.isSubmitting)
             .onChange((v: string) => { this.formSiteName = v })
         }
@@ -107,16 +107,16 @@ export struct SiteFormDialogComponent {
         Column({ space: Spacing.XS }) {
           Text('站点地址')
             .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .fontWeight(FontWeight.Medium)
           TextInput({ placeholder: 'https://example.com', text: this.formSiteUrl })
             .height(ComponentSize.INPUT_HEIGHT)
             .borderRadius(Radius.MD)
-            .backgroundColor(Colors.BG_SECONDARY)
+            .backgroundColor(ResourceColors.BG_SECONDARY)
             .padding({ left: Spacing.BASE, right: Spacing.BASE })
             .fontSize(Typography.BODY_LARGE)
-            .fontColor(Colors.TEXT_PRIMARY)
-            .placeholderColor(Colors.TEXT_HINT)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
+            .placeholderColor(ResourceColors.TEXT_HINT)
             .enabled(!this.isSubmitting)
             .onChange((v: string) => { this.formSiteUrl = v })
         }
@@ -127,16 +127,16 @@ export struct SiteFormDialogComponent {
         Column({ space: Spacing.XS }) {
           Text('用户名')
             .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .fontWeight(FontWeight.Medium)
           TextInput({ placeholder: 'admin', text: this.formUsername })
             .height(ComponentSize.INPUT_HEIGHT)
             .borderRadius(Radius.MD)
-            .backgroundColor(Colors.BG_SECONDARY)
+            .backgroundColor(ResourceColors.BG_SECONDARY)
             .padding({ left: Spacing.BASE, right: Spacing.BASE })
             .fontSize(Typography.BODY_LARGE)
-            .fontColor(Colors.TEXT_PRIMARY)
-            .placeholderColor(Colors.TEXT_HINT)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
+            .placeholderColor(ResourceColors.TEXT_HINT)
             .enabled(!this.isSubmitting)
             .onChange((v: string) => { this.formUsername = v })
         }
@@ -147,17 +147,17 @@ export struct SiteFormDialogComponent {
         Column({ space: Spacing.XS }) {
           Text('应用程序密码')
             .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .fontWeight(FontWeight.Medium)
           TextInput({ placeholder: 'xxxx xxxx xxxx xxxx xxxx xxxx', text: this.formAppPassword })
             .type(InputType.Password)
             .height(ComponentSize.INPUT_HEIGHT)
             .borderRadius(Radius.MD)
-            .backgroundColor(Colors.BG_SECONDARY)
+            .backgroundColor(ResourceColors.BG_SECONDARY)
             .padding({ left: Spacing.BASE, right: Spacing.BASE })
             .fontSize(Typography.BODY_LARGE)
-            .fontColor(Colors.TEXT_PRIMARY)
-            .placeholderColor(Colors.TEXT_HINT)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
+            .placeholderColor(ResourceColors.TEXT_HINT)
             .enabled(!this.isSubmitting)
             .onChange((v: string) => { this.formAppPassword = v })
         }
@@ -168,8 +168,8 @@ export struct SiteFormDialogComponent {
         Button(this.isSubmitting ? '保存中...' : (this.editingSite !== null ? '更新' : '添加'), { type: ButtonType.Capsule })
           .width('100%')
           .height(ComponentSize.BUTTON_HEIGHT)
-          .backgroundColor(Colors.PRIMARY)
-          .fontColor(Colors.TEXT_ON_PRIMARY)
+          .backgroundColor(ResourceColors.PRIMARY)
+          .fontColor(ResourceColors.TEXT_ON_PRIMARY)
           .fontSize(Typography.BODY_LARGE)
           .fontWeight(FontWeight.Medium)
           .enabled(!this.isSubmitting)
@@ -181,7 +181,7 @@ export struct SiteFormDialogComponent {
       .width('100%')
       .padding({ left: Spacing.LG, right: Spacing.LG, top: Spacing.LG, bottom: Spacing.XL })
       .borderRadius({ topLeft: Radius.XL, topRight: Radius.XL })
-      .backgroundColor(Colors.BG_PRIMARY)
+      .backgroundColor(ResourceColors.BG_PRIMARY)
       .position({ x: 0, y: '100%' })
       .translate({ y: this.show ? '-100%' : '0' })
       .animation({ duration: 300, curve: Curve.EaseOut })

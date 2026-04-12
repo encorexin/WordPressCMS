@@ -3,7 +3,15 @@
 
 export class DatabaseSchema {
   static readonly DB_NAME: string = 'WordPressCMS.db'
-  static readonly DB_VERSION: number = 1
+  static readonly DB_VERSION: number = 2
+  static readonly LEGACY_SCHEMA_VERSION: number = 1
+  static readonly SENSITIVE_FIELD_COLUMNS: string[] = [
+    'wordpress_sites.app_password',
+    'ai_settings.api_key',
+    'ai_settings.image_api_key'
+  ]
+  static readonly SENSITIVE_FIELD_MIGRATION_NOTE: string =
+    '阶段 03 起新写入统一使用带前缀的字段密文，读取继续兼容旧明文与旧 JSON 密文，暂不做静默回写迁移。'
 
   // 表名
   static readonly TABLE_USERS: string = 'users'
@@ -14,6 +22,8 @@ export class DatabaseSchema {
   static readonly TABLE_KEYWORDS: string = 'keywords'
   static readonly TABLE_TOPICS: string = 'topics'
   static readonly TABLE_VERSIONS: string = 'article_versions'
+  static readonly TABLE_SCHEMA_METADATA: string = 'schema_metadata'
+  static readonly META_KEY_SCHEMA_VERSION: string = 'schema_version'
 
   // 建表 SQL
   static readonly SQL_CREATE_USERS: string =
@@ -47,6 +57,8 @@ export class DatabaseSchema {
     'template TEXT, ' +
     'status TEXT DEFAULT \'draft\', ' +
     'wordpress_post_id TEXT, ' +
+    'word_count INTEGER DEFAULT 0, ' +
+    'tokens_used INTEGER DEFAULT 0, ' +
     'created_at TEXT NOT NULL, ' +
     'updated_at TEXT NOT NULL)'
 
@@ -67,6 +79,7 @@ export class DatabaseSchema {
     'image_enabled INTEGER DEFAULT 0, ' +
     'slug_model TEXT, ' +
     'slug_enabled INTEGER DEFAULT 1, ' +
+    'tokens_used INTEGER DEFAULT 0, ' +
     'created_at TEXT NOT NULL, ' +
     'updated_at TEXT NOT NULL)'
 
@@ -115,6 +128,12 @@ export class DatabaseSchema {
     'version_number INTEGER NOT NULL, ' +
     'created_at TEXT NOT NULL)'
 
+  static readonly SQL_CREATE_SCHEMA_METADATA: string =
+    'CREATE TABLE IF NOT EXISTS schema_metadata (' +
+    'meta_key TEXT PRIMARY KEY, ' +
+    'meta_value INTEGER NOT NULL, ' +
+    'updated_at TEXT NOT NULL)'
+
   static readonly SQL_ALTER_VERSIONS_ADD_SITE_ID: string =
     'ALTER TABLE article_versions ADD COLUMN site_id TEXT'
 
@@ -123,6 +142,36 @@ export class DatabaseSchema {
 
   static readonly SQL_ALTER_VERSIONS_ADD_STATUS: string =
     'ALTER TABLE article_versions ADD COLUMN status TEXT DEFAULT \'draft\''
+
+  static readonly SQL_ALTER_ARTICLES_ADD_WORD_COUNT: string =
+    'ALTER TABLE articles ADD COLUMN word_count INTEGER DEFAULT 0'
+
+  static readonly SQL_ALTER_ARTICLES_ADD_TOKENS_USED: string =
+    'ALTER TABLE articles ADD COLUMN tokens_used INTEGER DEFAULT 0'
+
+  static readonly SQL_ALTER_AI_SETTINGS_ADD_TOKENS_USED: string =
+    'ALTER TABLE ai_settings ADD COLUMN tokens_used INTEGER DEFAULT 0'
+
+  static readonly SQL_CREATE_INDEX_SITES_USER_ID: string =
+    'CREATE INDEX IF NOT EXISTS idx_sites_user_id ON wordpress_sites(user_id)'
+
+  static readonly SQL_CREATE_INDEX_ARTICLES_USER_ID: string =
+    'CREATE INDEX IF NOT EXISTS idx_articles_user_id ON articles(user_id)'
+
+  static readonly SQL_CREATE_INDEX_ARTICLES_SITE_ID: string =
+    'CREATE INDEX IF NOT EXISTS idx_articles_site_id ON articles(site_id)'
+
+  static readonly SQL_CREATE_INDEX_AI_SETTINGS_USER_ID: string =
+    'CREATE INDEX IF NOT EXISTS idx_ai_settings_user_id ON ai_settings(user_id)'
+
+  static readonly SQL_CREATE_INDEX_KEYWORDS_USER_GROUP: string =
+    'CREATE INDEX IF NOT EXISTS idx_keywords_user_group ON keywords(user_id, group_name)'
+
+  static readonly SQL_CREATE_INDEX_TOPICS_USER_CATEGORY: string =
+    'CREATE INDEX IF NOT EXISTS idx_topics_user_category ON topics(user_id, category)'
+
+  static readonly SQL_CREATE_INDEX_VERSIONS_ARTICLE_VERSION: string =
+    'CREATE INDEX IF NOT EXISTS idx_versions_article_version ON article_versions(article_id, version_number)'
 
   // 所有建表 SQL 有序列表
   static readonly ALL_CREATE_TABLES: string[] = [
@@ -133,12 +182,23 @@ export class DatabaseSchema {
     DatabaseSchema.SQL_CREATE_TEMPLATES,
     DatabaseSchema.SQL_CREATE_KEYWORDS,
     DatabaseSchema.SQL_CREATE_TOPICS,
-    DatabaseSchema.SQL_CREATE_VERSIONS
+    DatabaseSchema.SQL_CREATE_VERSIONS,
+    DatabaseSchema.SQL_CREATE_SCHEMA_METADATA
   ]
 
-  static readonly ALL_SAFE_ALTERS: string[] = [
+  static readonly VERSION_1_TO_2_MIGRATIONS: string[] = [
     DatabaseSchema.SQL_ALTER_VERSIONS_ADD_SITE_ID,
     DatabaseSchema.SQL_ALTER_VERSIONS_ADD_WP_POST_ID,
-    DatabaseSchema.SQL_ALTER_VERSIONS_ADD_STATUS
+    DatabaseSchema.SQL_ALTER_VERSIONS_ADD_STATUS,
+    DatabaseSchema.SQL_ALTER_ARTICLES_ADD_WORD_COUNT,
+    DatabaseSchema.SQL_ALTER_ARTICLES_ADD_TOKENS_USED,
+    DatabaseSchema.SQL_ALTER_AI_SETTINGS_ADD_TOKENS_USED,
+    DatabaseSchema.SQL_CREATE_INDEX_SITES_USER_ID,
+    DatabaseSchema.SQL_CREATE_INDEX_ARTICLES_USER_ID,
+    DatabaseSchema.SQL_CREATE_INDEX_ARTICLES_SITE_ID,
+    DatabaseSchema.SQL_CREATE_INDEX_AI_SETTINGS_USER_ID,
+    DatabaseSchema.SQL_CREATE_INDEX_KEYWORDS_USER_GROUP,
+    DatabaseSchema.SQL_CREATE_INDEX_TOPICS_USER_CATEGORY,
+    DatabaseSchema.SQL_CREATE_INDEX_VERSIONS_ARTICLE_VERSION
   ]
 }

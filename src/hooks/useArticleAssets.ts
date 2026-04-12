@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/LocalAuthProvider";
-import { getTemplates, initDefaultTemplates, type ArticleTemplate } from "@/db/templateService";
-import { getUnusedTopics, markTopicAsUsed, type Topic } from "@/db/topicService";
+import { getTemplates, getUnusedTopics, initDefaultTemplates, markTopicAsUsed, type ArticleTemplate, type Topic } from "@/db/api";
 import { handleApiError } from "@/utils/errorHandler";
 
 export function useArticleAssets() {
@@ -53,12 +52,12 @@ export function useArticleAssets() {
     }, []);
 
     const useTopic = useCallback(async () => {
-        if (selectedTopic) {
-            await markTopicAsUsed(selectedTopic.id);
+        if (selectedTopic && user?.id) {
+            await markTopicAsUsed(user.id, selectedTopic.id);
             setSelectedTopic(null);
             await loadTopics();
         }
-    }, [selectedTopic, loadTopics]);
+    }, [selectedTopic, user?.id, loadTopics]);
 
     useEffect(() => {
         loadTemplates();

@@ -1,12 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/LocalAuthProvider";
-import { getAISettingsById, getEffectiveAISettings } from "@/db/aiSettings";
-import { markTopicAsUsed } from "@/db/topicService";
+import { getAISettingsById, getEffectiveAISettings, markTopicAsUsed, type Topic } from "@/db/api";
 import { sendChatStream } from "@/utils/aiChat";
 import { aiLogger } from "@/utils/logger";
 import { withRetry } from "@/utils/retry";
-import type { Topic } from "@/db/topicService";
 
 export interface UseArticleGeneratorOptions {
     onUpdate: (content: string) => void;
@@ -88,7 +86,7 @@ export function useArticleGenerator(options: UseArticleGeneratorOptions) {
                                 setGenerating(false);
 
                                 if (options.selectedTopic) {
-                                    await markTopicAsUsed(options.selectedTopic.id);
+                                    await markTopicAsUsed(user.id, options.selectedTopic.id);
                                     options.onTopicUsed?.();
                                 }
 

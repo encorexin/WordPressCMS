@@ -1,4 +1,9 @@
-import { db, generateId, getTimestamp, type AISettings } from "./database";
+import { generateId, getTimestamp, type AISettings } from "./models";
+import {
+  getEncryptedAISettingsList,
+  hasEncryptionKey,
+  setEncryptedAISettingsList,
+} from "./encryptedDatabase";
 
 const DEFAULT_SYSTEM_PROMPT = `你是一位专业的内容创作者，擅长撰写高质量的文章。
 请根据用户提供的关键词和模板风格来生成文章。
@@ -17,10 +22,17 @@ const DEFAULT_AI_SETTINGS = {
   system_prompt: DEFAULT_SYSTEM_PROMPT,
 };
 
+function checkEncryptionKey(): void {
+  if (!hasEncryptionKey()) {
+    throw new Error("未登录或数据未解密，请重新登录");
+  }
+}
+
 // 获取用户的所有 AI 配置
 export async function getAllAISettings(userId: string): Promise<AISettings[]> {
-  const settings = await db.ai_settings.where("user_id").equals(userId).toArray();
-  return settings.sort((a, b) => {
+  checkEncryptionKey();
+  const settings = await getEncryptedAISettingsList(userId);
+  return [...settings].sort((a, b) => {
     if (a.is_default && !b.is_default) return -1;
     if (!a.is_default && b.is_default) return 1;
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
@@ -29,16 +41,10 @@ export async function getAllAISettings(userId: string): Promise<AISettings[]> {
 
 // 获取用户的默认 AI 配置
 export async function getDefaultAISettings(userId: string): Promise<AISettings | null> {
-  const settings = await db.ai_settings
-    .where("user_id")
-    .equals(userId)
-    .and((s) => s.is_default)
-    .first();
-
-  if (settings) return settings;
-
+  checkEncryptionKey();
   const allSettings = await getAllAISettings(userId);
-  return allSettings[0] ?? null;
+  const defaultSettings = allSettings.find((s) => s.is_default);
+  return defaultSettings || allSettings[0] || null;
 }
 
 // 获取单个 AI 配置
@@ -46,7 +52,12 @@ export async function getAISettingsById(
   settingsId: string,
   userId?: string
 ): Promise<AISettings | null> {
-  const settings = await db.ai_settings.get(settingsId);
+  checkEncryptionKey();
+  if (!userId) {
+    return null;
+  }
+  const allSettings = await getEncryptedAISettingsList(userId);
+  const settings = allSettings.find((s) => s.id === settingsId);
   if (!settings) return null;
   if (userId && settings.user_id !== userId) return null;
   return settings;
@@ -76,10 +87,7 @@ export async function createAISettings(
     slug_enabled?: boolean;
   }
 ): Promise<AISettings> {
-  if (settings.is_default) {
-    await db.ai_settings.where("user_id").equals(userId).modify({ is_default: false });
-  }
-
+  checkEncryptionKey();
   const existingSettings = await getAllAISettings(userId);
   const shouldBeDefault = settings.is_default ?? existingSettings.length === 0;
 
@@ -103,7 +111,12 @@ export async function createAISettings(
     updated_at: getTimestamp(),
   };
 
-  await db.ai_settings.add(newSettings);
+  const next = existingSettings.map((s) => ({
+    ...s,
+    is_default: shouldBeDefault ? false : s.is_default,
+  }));
+  next.push(newSettings);
+  await setEncryptedAISettingsList(userId, next);
   return newSettings;
 }
 
@@ -113,22 +126,35 @@ export async function updateAISettings(
   userId: string,
   settings: Partial<Omit<AISettings, "id" | "user_id" | "created_at">>
 ): Promise<AISettings | null> {
-  const existing = await db.ai_settings.get(settingsId);
-  if (!existing || existing.user_id !== userId) {
-    return null;
-  }
+  checkEncryptionKey();
+  const list = await getAllAISettings(userId);
+  const existingIndex = list.findIndex((s) => s.id === settingsId);
+  if (existingIndex < 0) return null;
 
-  if (settings.is_default) {
-    await db.ai_settings.where("user_id").equals(userId).modify({ is_default: false });
-  }
+  const existing = list[existingIndex];
+  if (existing.user_id !== userId) return null;
 
-  const updatedSettings = {
+  const updated: AISettings = {
+    ...existing,
     ...settings,
+    id: existing.id,
+    user_id: existing.user_id,
+    created_at: existing.created_at,
     updated_at: getTimestamp(),
   };
 
-  await db.ai_settings.update(settingsId, updatedSettings);
-  return { ...existing, ...updatedSettings } as AISettings;
+  const next = list.map((s) => {
+    if (s.id === settingsId) {
+      return updated;
+    }
+    if (settings.is_default) {
+      return { ...s, is_default: false };
+    }
+    return s;
+  });
+
+  await setEncryptedAISettingsList(userId, next);
+  return updated;
 }
 
 // 保存或更新 AI 设置（兼容旧接口）
@@ -149,46 +175,55 @@ export async function saveAISettings(
   }
 ): Promise<AISettings> {
   const existing = await getDefaultAISettings(userId);
-
   if (existing) {
-    return (await updateAISettings(existing.id, userId, settings)) as AISettings;
-  } else {
-    return createAISettings(userId, {
-      name: "默认配置",
-      ...settings,
-    });
+    const updated = await updateAISettings(existing.id, userId, settings);
+    if (!updated) {
+      throw new Error("保存失败");
+    }
+    return updated;
   }
+  return createAISettings(userId, {
+    name: "默认配置",
+    is_default: true,
+    ...settings,
+  });
 }
 
 // 删除 AI 配置
 export async function deleteAISettings(settingsId: string, userId: string): Promise<boolean> {
-  const existing = await db.ai_settings.get(settingsId);
-  if (!existing || existing.user_id !== userId) {
-    return false;
+  checkEncryptionKey();
+  const list = await getAllAISettings(userId);
+  const existing = list.find((s) => s.id === settingsId);
+  if (!existing || existing.user_id !== userId) return false;
+
+  const remaining = list.filter((s) => s.id !== settingsId);
+  if (remaining.length > 0 && existing.is_default) {
+    const sorted = [...remaining].sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+    const nextDefaultId = sorted[0].id;
+    const next = remaining.map((s) => ({ ...s, is_default: s.id === nextDefaultId }));
+    await setEncryptedAISettingsList(userId, next);
+    return true;
   }
 
-  await db.ai_settings.delete(settingsId);
-
-  if (existing.is_default) {
-    const remaining = await getAllAISettings(userId);
-    if (remaining.length > 0) {
-      await db.ai_settings.update(remaining[0].id, { is_default: true });
-    }
-  }
-
+  await setEncryptedAISettingsList(userId, remaining);
   return true;
 }
 
 // 设置默认配置
 export async function setDefaultAISettings(settingsId: string, userId: string): Promise<boolean> {
-  const existing = await db.ai_settings.get(settingsId);
-  if (!existing || existing.user_id !== userId) {
-    return false;
-  }
+  checkEncryptionKey();
+  const list = await getAllAISettings(userId);
+  const existing = list.find((s) => s.id === settingsId);
+  if (!existing || existing.user_id !== userId) return false;
 
-  await db.ai_settings.where("user_id").equals(userId).modify({ is_default: false });
-
-  await db.ai_settings.update(settingsId, { is_default: true, updated_at: getTimestamp() });
+  const next = list.map((s) => ({
+    ...s,
+    is_default: s.id === settingsId,
+    updated_at: s.id === settingsId ? getTimestamp() : s.updated_at,
+  }));
+  await setEncryptedAISettingsList(userId, next);
   return true;
 }
 
@@ -206,7 +241,7 @@ export async function getEffectiveAISettings(
   let settings: AISettings | null = null;
 
   if (settingsId) {
-    settings = await getAISettingsById(settingsId);
+    settings = await getAISettingsById(settingsId, userId);
   }
 
   if (!settings) {
@@ -239,7 +274,7 @@ export async function getImageSettings(
   let settings: AISettings | null = null;
 
   if (settingsId) {
-    settings = await getAISettingsById(settingsId);
+    settings = await getAISettingsById(settingsId, userId);
   } else {
     settings = await getDefaultAISettings(userId);
   }
@@ -267,7 +302,7 @@ export async function getSlugSettings(
   let settings: AISettings | null = null;
 
   if (settingsId) {
-    settings = await getAISettingsById(settingsId);
+    settings = await getAISettingsById(settingsId, userId);
   } else {
     settings = await getDefaultAISettings(userId);
   }

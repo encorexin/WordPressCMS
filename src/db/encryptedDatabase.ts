@@ -3,10 +3,10 @@
  * 所有敏感数据都通过用户密码加密存储
  */
 
-import { db, generateId, getTimestamp } from './database';
+import { generateId, getTimestamp } from "./models";
+import { legacyDb } from "./legacyDatabase";
 import { storageLogger } from '@/utils/logger';
 import type {
-    LocalUser,
     LocalArticle,
     LocalWordPressSite,
     AISettings,
@@ -14,7 +14,7 @@ import type {
     Keyword,
     Topic,
     ArticleVersion
-} from './database';
+} from "./models";
 import {
     saveEncryptedData,
     loadEncryptedData,
@@ -128,22 +128,88 @@ export async function getEncryptedAISettings(userId: string): Promise<AISettings
     if (!hasEncryptionKey()) {
         throw new Error('未登录或密钥未设置');
     }
-    return await loadEncryptedData<AISettings>(userId, DATA_TYPES.AI_SETTINGS);
+    const stored = await loadEncryptedData<AISettings | AISettings[]>(userId, DATA_TYPES.AI_SETTINGS);
+    if (!stored) return null;
+    if (Array.isArray(stored)) {
+        const defaultSettings = stored.find(s => s.is_default) || stored[0];
+        return defaultSettings || null;
+    }
+    return stored;
 }
 
 export async function saveEncryptedAISettings(userId: string, settings: AISettings): Promise<void> {
     if (!hasEncryptionKey()) {
         throw new Error('未登录或密钥未设置');
     }
-    const existing = await getEncryptedAISettings(userId);
-    const newSettings: AISettings = {
+    const list = await getEncryptedAISettingsList(userId);
+    if (list.length === 0) {
+        const newSettings: AISettings = {
+            ...settings,
+            id: settings.id || generateId(),
+            user_id: userId,
+            name: settings.name || "默认配置",
+            is_default: true,
+            created_at: settings.created_at || getTimestamp(),
+            updated_at: getTimestamp(),
+        };
+        await saveEncryptedData(userId, DATA_TYPES.AI_SETTINGS, [newSettings]);
+        return;
+    }
+
+    const defaultIndex = list.findIndex(s => s.is_default);
+    const targetIndex = defaultIndex >= 0 ? defaultIndex : 0;
+    const existing = list[targetIndex];
+    const updated: AISettings = {
+        ...existing,
         ...settings,
-        id: existing?.id || generateId(),
+        id: existing.id,
         user_id: userId,
-        created_at: existing?.created_at || getTimestamp(),
+        name: existing.name || settings.name || "默认配置",
+        is_default: true,
+        created_at: existing.created_at,
         updated_at: getTimestamp(),
     };
-    await saveEncryptedData(userId, DATA_TYPES.AI_SETTINGS, newSettings);
+
+    const next = list.map((s, index) => {
+        if (index === targetIndex) {
+            return updated;
+        }
+        return { ...s, is_default: false };
+    });
+    await saveEncryptedData(userId, DATA_TYPES.AI_SETTINGS, next);
+}
+
+export async function getEncryptedAISettingsList(userId: string): Promise<AISettings[]> {
+    if (!hasEncryptionKey()) {
+        throw new Error('未登录或密钥未设置');
+    }
+    const stored = await loadEncryptedData<AISettings | AISettings[]>(userId, DATA_TYPES.AI_SETTINGS);
+    if (!stored) return [];
+    if (Array.isArray(stored)) {
+        return stored.map(s => ({
+            ...s,
+            name: s.name || "默认配置",
+            is_default: s.is_default ?? false,
+        }));
+    }
+    const normalized: AISettings = {
+        ...stored,
+        id: stored.id || generateId(),
+        user_id: userId,
+        name: stored.name || "默认配置",
+        is_default: true,
+        created_at: stored.created_at || getTimestamp(),
+        updated_at: stored.updated_at || getTimestamp(),
+    };
+    await saveEncryptedData(userId, DATA_TYPES.AI_SETTINGS, [normalized]);
+    return [normalized];
+}
+
+export async function setEncryptedAISettingsList(userId: string, settingsList: AISettings[]): Promise<void> {
+    if (!hasEncryptionKey()) {
+        throw new Error('未登录或密钥未设置');
+    }
+    await saveEncryptedData(userId, DATA_TYPES.AI_SETTINGS, settingsList);
 }
 
 // ==================== 模板相关 ====================
@@ -154,6 +220,13 @@ export async function getEncryptedTemplates(userId: string): Promise<ArticleTemp
     }
     const templates = await loadEncryptedData<ArticleTemplate[]>(userId, DATA_TYPES.TEMPLATES);
     return templates || [];
+}
+
+export async function setEncryptedTemplates(userId: string, templates: ArticleTemplate[]): Promise<void> {
+    if (!hasEncryptionKey()) {
+        throw new Error('未登录或密钥未设置');
+    }
+    await saveEncryptedData(userId, DATA_TYPES.TEMPLATES, templates);
 }
 
 export async function saveEncryptedTemplate(userId: string, template: ArticleTemplate): Promise<void> {
@@ -195,6 +268,13 @@ export async function getEncryptedKeywords(userId: string): Promise<Keyword[]> {
     return keywords || [];
 }
 
+export async function setEncryptedKeywords(userId: string, keywords: Keyword[]): Promise<void> {
+    if (!hasEncryptionKey()) {
+        throw new Error('未登录或密钥未设置');
+    }
+    await saveEncryptedData(userId, DATA_TYPES.KEYWORDS, keywords);
+}
+
 export async function saveEncryptedKeyword(userId: string, keyword: Keyword): Promise<void> {
     if (!hasEncryptionKey()) {
         throw new Error('未登录或密钥未设置');
@@ -228,6 +308,13 @@ export async function getEncryptedTopics(userId: string): Promise<Topic[]> {
     }
     const topics = await loadEncryptedData<Topic[]>(userId, DATA_TYPES.TOPICS);
     return topics || [];
+}
+
+export async function setEncryptedTopics(userId: string, topics: Topic[]): Promise<void> {
+    if (!hasEncryptionKey()) {
+        throw new Error('未登录或密钥未设置');
+    }
+    await saveEncryptedData(userId, DATA_TYPES.TOPICS, topics);
 }
 
 export async function saveEncryptedTopic(userId: string, topic: Topic): Promise<void> {
@@ -331,43 +418,43 @@ export async function migrateFromDexie(
         setEncryptionKey(userId, password);
 
         // 迁移文章
-        const articles = await db.articles.where('user_id').equals(userId).toArray();
+        const articles = await legacyDb.articles.where('user_id').equals(userId).toArray();
         if (articles.length > 0) {
             await saveEncryptedData(userId, DATA_TYPES.ARTICLES, articles, password);
         }
 
         // 迁移站点
-        const sites = await db.wordpressSites.where('user_id').equals(userId).toArray();
+        const sites = await legacyDb.wordpress_sites.where('user_id').equals(userId).toArray();
         if (sites.length > 0) {
             await saveEncryptedData(userId, DATA_TYPES.SITES, sites, password);
         }
 
         // 迁移 AI 设置
-        const aiSettings = await db.aiSettings.where('user_id').equals(userId).first();
+        const aiSettings = await legacyDb.ai_settings.where('user_id').equals(userId).first();
         if (aiSettings) {
             await saveEncryptedData(userId, DATA_TYPES.AI_SETTINGS, aiSettings, password);
         }
 
         // 迁移模板
-        const templates = await db.templates.where('user_id').equals(userId).toArray();
+        const templates = await legacyDb.article_templates.where('user_id').equals(userId).toArray();
         if (templates.length > 0) {
             await saveEncryptedData(userId, DATA_TYPES.TEMPLATES, templates, password);
         }
 
         // 迁移关键词
-        const keywords = await db.keywords.where('user_id').equals(userId).toArray();
+        const keywords = await legacyDb.keywords.where('user_id').equals(userId).toArray();
         if (keywords.length > 0) {
             await saveEncryptedData(userId, DATA_TYPES.KEYWORDS, keywords, password);
         }
 
         // 迁移主题
-        const topics = await db.topics.where('user_id').equals(userId).toArray();
+        const topics = await legacyDb.topics.where('user_id').equals(userId).toArray();
         if (topics.length > 0) {
             await saveEncryptedData(userId, DATA_TYPES.TOPICS, topics, password);
         }
 
         // 迁移文章版本
-        const versions = await db.articleVersions.where('user_id').equals(userId).toArray();
+        const versions = await legacyDb.article_versions.where('user_id').equals(userId).toArray();
         if (versions.length > 0) {
             await saveEncryptedData(userId, DATA_TYPES.ARTICLE_VERSIONS, versions, password);
         }

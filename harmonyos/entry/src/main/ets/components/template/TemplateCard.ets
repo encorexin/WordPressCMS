@@ -1,13 +1,22 @@
 // 模板卡片组件 — 提取自 TemplatesPage.ets
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
 import { ArticleTemplate } from '../../models/ArticleTemplate'
 
+@Reusable
 @Component
 export struct TemplateCardComponent {
   @Prop template: ArticleTemplate = new ArticleTemplate()
   onEdit: () => void = () => {}
   onDelete: () => void = () => {}
+
+  /**
+   * @Reusable 组件复用时重置内部状态
+   * 当前组件无 @State 内部状态，但保留此生命周期以防护后续新增状态时遗漏
+   */
+  aboutToReuse(): void {
+    // 当前无内部 @State 需要重置，@Prop 由父组件同步
+  }
 
   build() {
     Column({ space: Spacing.SM }) {
@@ -15,7 +24,7 @@ export struct TemplateCardComponent {
       Text(this.template.name)
         .fontSize(Typography.BODY_LARGE)
         .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
@@ -23,7 +32,7 @@ export struct TemplateCardComponent {
       if (this.template.description.length > 0) {
         Text(this.template.description)
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
@@ -32,17 +41,17 @@ export struct TemplateCardComponent {
       Column({ space: Spacing.XS }) {
         Text('系统提示词')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_HINT)
         Text(this.template.systemPrompt)
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
           .fontFamily('monospace')
           .maxLines(3)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .width('100%')
       .padding(Spacing.SM)
-      .backgroundColor(Colors.BG_SECONDARY)
+      .backgroundColor(ResourceColors.BG_SECONDARY)
       .borderRadius(Radius.MD)
       .alignItems(HorizontalAlign.Start)
 
@@ -50,7 +59,7 @@ export struct TemplateCardComponent {
       Row({ space: Spacing.SM }) {
         Button('编辑', { type: ButtonType.Normal })
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.PRIMARY)
+          .fontColor(ResourceColors.PRIMARY)
           .backgroundColor(Color.Transparent)
           .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
           .onClick(() => {
@@ -59,7 +68,7 @@ export struct TemplateCardComponent {
 
         Button('删除', { type: ButtonType.Normal })
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.ERROR)
+          .fontColor(ResourceColors.ERROR)
           .backgroundColor(Color.Transparent)
           .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
           .onClick(() => {
@@ -72,8 +81,8 @@ export struct TemplateCardComponent {
     .width('100%')
     .padding(Spacing.BASE)
     .borderRadius(Radius.LG)
-    .backgroundColor(Colors.BG_CARD)
+    .backgroundColor(ResourceColors.BG_CARD)
     .borderWidth(1)
-    .borderColor(Colors.BORDER)
+    .borderColor(ResourceColors.BORDER)
   }
 }

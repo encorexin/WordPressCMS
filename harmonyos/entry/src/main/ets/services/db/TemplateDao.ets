@@ -1,16 +1,15 @@
 // 模板表 CRUD
 
 import relationalStore from '@ohos.data.relationalStore'
-import { DatabaseHelper } from './DatabaseHelper'
 import { DatabaseSchema } from '../../constants/DatabaseSchema'
 import { ArticleTemplate } from '../../models/ArticleTemplate'
 import { generateId } from '../../utils/IdGenerator'
 import { getTimestamp } from '../../utils/DateUtil'
+import { BaseDao } from './BaseDao'
 
 export class TemplateDao {
-  private static getStore(): relationalStore.RdbStore {
-    return DatabaseHelper.getStore()
-  }
+  private static readonly baseDao: BaseDao<ArticleTemplate> =
+    new BaseDao<ArticleTemplate>(DatabaseSchema.TABLE_TEMPLATES, TemplateDao.fromResultSet)
 
   static async insert(userId: string, name: string, description: string,
     systemPrompt: string): Promise<ArticleTemplate> {
@@ -34,7 +33,7 @@ export class TemplateDao {
         'created_at': template.createdAt,
         'updated_at': template.updatedAt
       }
-      await TemplateDao.getStore().insert(DatabaseSchema.TABLE_TEMPLATES, bucket)
+      await TemplateDao.baseDao.getStore().insert(DatabaseSchema.TABLE_TEMPLATES, bucket)
       return template
     } catch (err) {
       throw new Error(`Failed to insert template: ${String(err)}`)
@@ -42,42 +41,33 @@ export class TemplateDao {
   }
 
   static async findByUserId(userId: string): Promise<ArticleTemplate[]> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_TEMPLATES)
       predicates.equalTo('user_id', userId)
       predicates.orderByDesc('created_at')
-      resultSet = await TemplateDao.getStore().query(predicates)
-      const list: ArticleTemplate[] = []
-      while (resultSet.goToNextRow()) {
-        list.push(TemplateDao.fromResultSet(resultSet))
-      }
-      return list
+      return await TemplateDao.baseDao.queryList(predicates, 'TemplateDao.findByUserId')
     } catch (err) {
       throw new Error(`Failed to find templates by user: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
   static async findById(id: string): Promise<ArticleTemplate | null> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_TEMPLATES)
       predicates.equalTo('id', id)
-      resultSet = await TemplateDao.getStore().query(predicates)
-      if (resultSet.goToFirstRow()) {
-        return TemplateDao.fromResultSet(resultSet)
-      }
-      return null
+      return await TemplateDao.baseDao.queryFirst(predicates, 'TemplateDao.findById')
     } catch (err) {
       throw new Error(`Failed to find template by id: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
+    }
+  }
+
+  static async countByUserId(userId: string): Promise<number> {
+    try {
+      const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_TEMPLATES)
+      predicates.equalTo('user_id', userId)
+      return await TemplateDao.baseDao.count(predicates, 'TemplateDao.countByUserId')
+    } catch (err) {
+      throw new Error(`Failed to count templates: ${String(err)}`)
     }
   }
 
@@ -91,7 +81,7 @@ export class TemplateDao {
         'system_prompt': template.systemPrompt,
         'updated_at': getTimestamp()
       }
-      await TemplateDao.getStore().update(bucket, predicates)
+      await TemplateDao.baseDao.getStore().update(bucket, predicates)
     } catch (err) {
       throw new Error(`Failed to update template: ${String(err)}`)
     }
@@ -101,7 +91,7 @@ export class TemplateDao {
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_TEMPLATES)
       predicates.equalTo('id', id)
-      await TemplateDao.getStore().delete(predicates)
+      await TemplateDao.baseDao.getStore().delete(predicates)
     } catch (err) {
       throw new Error(`Failed to delete template: ${String(err)}`)
     }

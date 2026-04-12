@@ -33,11 +33,12 @@ import {
 } from "lucide-react";
 import {
     getKeywordsByGroup,
+    createKeyword,
     createKeywordsBatch,
     deleteKeyword,
     deleteKeywordsByGroup,
     type Keyword,
-} from "@/db/keywordService";
+} from "@/db/api";
 import { fetchKeywordsFromAI, fetchKeywordsFromTrends } from "@/utils/keywordFetcher";
 
 export default function Keywords() {
@@ -119,7 +120,6 @@ export default function Keywords() {
                 .filter(k => k);
 
             if (keywords.length === 1) {
-                const { createKeyword } = await import("@/db/keywordService");
                 await createKeyword(user.id, {
                     keyword: keywords[0],
                     group_name: formData.group_name || "未分组",
@@ -156,7 +156,7 @@ export default function Keywords() {
             setFetchedKeywords([]);
             setSelectedKeywords(new Set());
 
-            let result;
+            let result: Awaited<ReturnType<typeof fetchKeywordsFromAI>>;
             if (fetchFormData.source === "ai") {
                 result = await fetchKeywordsFromAI(
                     user.id,
@@ -226,8 +226,9 @@ export default function Keywords() {
     };
 
     const handleDeleteKeyword = async (keyword: Keyword) => {
+        if (!user?.id) return;
         try {
-            await deleteKeyword(keyword.id);
+            await deleteKeyword(user.id, keyword.id);
             toast.success("已删除");
             await loadKeywords();
         } catch (error) {

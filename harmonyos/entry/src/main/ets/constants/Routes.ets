@@ -14,3 +14,23 @@ export class Routes {
   static readonly ADMIN: string = 'AdminPage'
   static readonly ABOUT: string = 'AboutPage'
 }
+
+/** 文章编辑器导航参数 — 替代 param['xxx'] 动态属性访问 */
+export class ArticleEditorNavParam {
+  articleId: string = 'new'
+  sourceType: string = 'article'
+  sourceId: string = ''
+  initialTitle: string = ''
+  initialKeywords: string = ''
+}
+
+/** 创建文章编辑器导航参数的便捷方法 */
+export function createArticleEditorParam(options: Partial<ArticleEditorNavParam>): ArticleEditorNavParam {
+  const param = new ArticleEditorNavParam()
+  if (options.articleId !== undefined) { param.articleId = options.articleId }
+  if (options.sourceType !== undefined) { param.sourceType = options.sourceType }
+  if (options.sourceId !== undefined) { param.sourceId = options.sourceId }
+  if (options.initialTitle !== undefined) { param.initialTitle = options.initialTitle }
+  if (options.initialKeywords !== undefined) { param.initialKeywords = options.initialKeywords }
+  return param
+}

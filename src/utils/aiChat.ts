@@ -247,7 +247,7 @@ export async function generateSEOSlug(
 
     if (!response.ok) {
       const errorText = await response.text();
-      aiLogger.error("AI Slug 生成失败:", response.status, errorText);
+      aiLogger.error("AI Slug 生成失败", { status: response.status, errorText });
       throw new Error(`API 请求失败: ${response.status}`);
     }
 

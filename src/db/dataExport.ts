@@ -1,15 +1,16 @@
-import {
-  type AISettings,
-  type ArticleTemplate,
-  db,
-  type Keyword,
-  type LocalArticle,
-  type LocalUser,
-  type LocalWordPressSite,
-  type Topic,
-} from "./database";
+import type {
+  AISettings,
+  ArticleTemplate,
+  Keyword,
+  LocalArticle,
+  LocalUser,
+  LocalWordPressSite,
+  Topic,
+} from "./models";
 import { exportEncryptedData, importEncryptedData } from "./encryptedApi";
 import { hasEncryptionKey } from "./encryptedDatabase";
+import { db } from "./database";
+import { legacyDb } from "./legacyDatabase";
 
 // 数据库记录联合类型
 type DatabaseRecord =
@@ -31,6 +32,8 @@ export interface ExportDataPlain {
   keywords: Keyword[];
   topics: Topic[];
 }
+
+export type ExportTableName = keyof ExportDataPlain;
 
 // 导出数据结构
 export interface ExportData {
@@ -66,12 +69,12 @@ export async function exportAllData(userId?: string, encrypt: boolean = true): P
   const [users, wordpress_sites, articles, ai_settings, article_templates, keywords, topics] =
     await Promise.all([
       db.users.toArray(),
-      db.wordpress_sites.toArray(),
-      db.articles.toArray(),
-      db.ai_settings.toArray(),
-      db.article_templates.toArray(),
-      db.keywords.toArray(),
-      db.topics.toArray(),
+      legacyDb.wordpress_sites.toArray(),
+      legacyDb.articles.toArray(),
+      legacyDb.ai_settings.toArray(),
+      legacyDb.article_templates.toArray(),
+      legacyDb.keywords.toArray(),
+      legacyDb.topics.toArray(),
     ]);
 
   return {
@@ -91,10 +94,10 @@ export async function exportAllData(userId?: string, encrypt: boolean = true): P
 }
 
 // 导出单个表数据（明文，便于查看）
-export async function exportTableData(
-  tableName: string,
+export async function exportTableData<K extends ExportTableName>(
+  tableName: K,
   userId?: string
-): Promise<SingleExportData> {
+): Promise<Omit<SingleExportData, "data"> & { data: ExportDataPlain[K] }> {
   // 如果用户已登录且已解密，从加密存储获取
   if (userId && hasEncryptionKey()) {
     const {
@@ -128,6 +131,9 @@ export async function exportTableData(
         data = settings ? [settings] : [];
         break;
       }
+      case "users":
+        data = [];
+        break;
       default:
         throw new Error(`不支持的表: ${tableName}`);
     }
@@ -137,30 +143,33 @@ export async function exportTableData(
       exportedAt: new Date().toISOString(),
       count: data.length,
       encrypted: false, // 单个表导出为明文（便于查看）
-      data,
+      data: data as unknown as ExportDataPlain[K],
     };
   }
 
   // 否则从旧数据库获取（向后兼容）
   let data: DatabaseRecord[] = [];
   switch (tableName) {
+    case "users":
+      data = await db.users.toArray();
+      break;
     case "articles":
-      data = await db.articles.toArray();
+      data = await legacyDb.articles.toArray();
       break;
     case "wordpress_sites":
-      data = await db.wordpress_sites.toArray();
+      data = await legacyDb.wordpress_sites.toArray();
       break;
     case "article_templates":
-      data = await db.article_templates.toArray();
+      data = await legacyDb.article_templates.toArray();
       break;
     case "keywords":
-      data = await db.keywords.toArray();
+      data = await legacyDb.keywords.toArray();
       break;
     case "topics":
-      data = await db.topics.toArray();
+      data = await legacyDb.topics.toArray();
       break;
     case "ai_settings":
-      data = await db.ai_settings.toArray();
+      data = await legacyDb.ai_settings.toArray();
       break;
     default:
       throw new Error(`不支持的表: ${tableName}`);
@@ -171,13 +180,13 @@ export async function exportTableData(
     exportedAt: new Date().toISOString(),
     count: data.length,
     encrypted: false,
-    data,
+    data: data as unknown as ExportDataPlain[K],
   };
 }
 
 // 加密导出单个表数据
 export async function exportEncryptedTableData(
-  tableName: string,
+  tableName: ExportTableName,
   userId?: string
 ): Promise<ExportData> {
   if (!userId || !hasEncryptionKey()) {
@@ -253,13 +262,13 @@ export function downloadExportFile(data: ExportData | SingleExportData, filename
 }
 
 // 导出为 CSV 格式
-export function exportToCSV(data: Record<string, unknown>[], filename: string): void {
+export function exportToCSV<T extends object>(data: T[], filename: string): void {
   if (data.length === 0) {
     throw new Error("没有数据可导出");
   }
 
   // 获取所有列名
-  const headers = Object.keys(data[0]);
+  const headers = Object.keys(data[0] as Record<string, unknown>);
 
   // 构建 CSV 内容
   const csvContent = [
@@ -267,7 +276,7 @@ export function exportToCSV(data: Record<string, unknown>[], filename: string): 
     ...data.map((row) =>
       headers
         .map((header) => {
-          const value = row[header];
+          const value = (row as Record<string, unknown>)[header];
           // 处理特殊字符
           if (value === null || value === undefined) return "";
           const str = String(value);
@@ -497,7 +506,7 @@ export async function exportAISettingsToJSON(userId?: string): Promise<void> {
       ai_settings = [settings];
     }
   } else {
-    ai_settings = await db.ai_settings.toArray();
+    ai_settings = await legacyDb.ai_settings.toArray();
   }
 
   // 过滤敏感信息，只保留部分 API key 用于参考
@@ -535,7 +544,7 @@ export async function exportAISettingsFull(userId?: string): Promise<object> {
     const settings = await getEncryptedAISettings(userId);
     return settings || {};
   }
-  const settings = await db.ai_settings.toArray();
+  const settings = await legacyDb.ai_settings.toArray();
   return settings[0] || {};
 }
 
@@ -611,15 +620,15 @@ export async function importData(
       for (const article of plainData.articles) {
         try {
           if (overwrite) {
-            await db.articles.put(article);
+            await legacyDb.articles.put(article);
           } else if (merge) {
-            const existing = await db.articles.get(article.id);
+            const existing = await legacyDb.articles.get(article.id);
             if (!existing) {
-              await db.articles.add(article);
+              await legacyDb.articles.add(article);
               imported++;
             }
           } else {
-            await db.articles.add(article);
+            await legacyDb.articles.add(article);
             imported++;
           }
         } catch (error) {
@@ -633,15 +642,15 @@ export async function importData(
       for (const site of plainData.wordpress_sites) {
         try {
           if (overwrite) {
-            await db.wordpress_sites.put(site);
+            await legacyDb.wordpress_sites.put(site);
           } else if (merge) {
-            const existing = await db.wordpress_sites.get(site.id);
+            const existing = await legacyDb.wordpress_sites.get(site.id);
             if (!existing) {
-              await db.wordpress_sites.add(site);
+              await legacyDb.wordpress_sites.add(site);
               imported++;
             }
           } else {
-            await db.wordpress_sites.add(site);
+            await legacyDb.wordpress_sites.add(site);
             imported++;
           }
         } catch (error) {
@@ -655,15 +664,15 @@ export async function importData(
       for (const template of plainData.article_templates) {
         try {
           if (overwrite) {
-            await db.article_templates.put(template);
+            await legacyDb.article_templates.put(template);
           } else if (merge) {
-            const existing = await db.article_templates.get(template.id);
+            const existing = await legacyDb.article_templates.get(template.id);
             if (!existing) {
-              await db.article_templates.add(template);
+              await legacyDb.article_templates.add(template);
               imported++;
             }
           } else {
-            await db.article_templates.add(template);
+            await legacyDb.article_templates.add(template);
             imported++;
           }
         } catch (error) {
@@ -677,15 +686,15 @@ export async function importData(
       for (const keyword of plainData.keywords) {
         try {
           if (overwrite) {
-            await db.keywords.put(keyword);
+            await legacyDb.keywords.put(keyword);
           } else if (merge) {
-            const existing = await db.keywords.get(keyword.id);
+            const existing = await legacyDb.keywords.get(keyword.id);
             if (!existing) {
-              await db.keywords.add(keyword);
+              await legacyDb.keywords.add(keyword);
               imported++;
             }
           } else {
-            await db.keywords.add(keyword);
+            await legacyDb.keywords.add(keyword);
             imported++;
           }
         } catch (error) {
@@ -699,15 +708,15 @@ export async function importData(
       for (const topic of plainData.topics) {
         try {
           if (overwrite) {
-            await db.topics.put(topic);
+            await legacyDb.topics.put(topic);
           } else if (merge) {
-            const existing = await db.topics.get(topic.id);
+            const existing = await legacyDb.topics.get(topic.id);
             if (!existing) {
-              await db.topics.add(topic);
+              await legacyDb.topics.add(topic);
               imported++;
             }
           } else {
-            await db.topics.add(topic);
+            await legacyDb.topics.add(topic);
             imported++;
           }
         } catch (error) {
@@ -721,15 +730,15 @@ export async function importData(
       for (const setting of plainData.ai_settings) {
         try {
           if (overwrite) {
-            await db.ai_settings.put(setting);
+            await legacyDb.ai_settings.put(setting);
           } else if (merge) {
-            const existing = await db.ai_settings.get(setting.id);
+            const existing = await legacyDb.ai_settings.get(setting.id);
             if (!existing) {
-              await db.ai_settings.add(setting);
+              await legacyDb.ai_settings.add(setting);
               imported++;
             }
           } else {
-            await db.ai_settings.add(setting);
+            await legacyDb.ai_settings.add(setting);
             imported++;
           }
         } catch (error) {
@@ -751,12 +760,12 @@ export async function importData(
 // 获取数据统计
 export async function getDataStats(): Promise<Record<string, number>> {
   const [articles, sites, templates, keywords, topics, aiSettings] = await Promise.all([
-    db.articles.count(),
-    db.wordpress_sites.count(),
-    db.article_templates.count(),
-    db.keywords.count(),
-    db.topics.count(),
-    db.ai_settings.count(),
+    legacyDb.articles.count(),
+    legacyDb.wordpress_sites.count(),
+    legacyDb.article_templates.count(),
+    legacyDb.keywords.count(),
+    legacyDb.topics.count(),
+    legacyDb.ai_settings.count(),
   ]);
 
   return {
@@ -770,7 +779,7 @@ export async function getDataStats(): Promise<Record<string, number>> {
 }
 
 // 表名映射
-export const TABLE_NAMES: Record<string, string> = {
+export const TABLE_NAMES: Partial<Record<ExportTableName, string>> = {
   articles: "文章",
   wordpress_sites: "WordPress 站点",
   article_templates: "文章模板",

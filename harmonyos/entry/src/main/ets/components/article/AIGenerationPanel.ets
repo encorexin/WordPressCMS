@@ -1,6 +1,6 @@
 // AI 生成面板组件 — 提取自 ArticleEditorPage.ets
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
 
 @Component
 export struct AIGenerationPanelComponent {
@@ -16,17 +16,17 @@ export struct AIGenerationPanelComponent {
         Text('AI 生成')
           .fontSize(Typography.BODY_LARGE)
           .fontWeight(FontWeight.Medium)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
         Blank()
         if (this.isGenerating) {
           Row({ space: Spacing.XS }) {
             LoadingProgress()
               .width(14)
               .height(14)
-              .color(Colors.PRIMARY)
+              .color(ResourceColors.PRIMARY)
             Text('生成中...')
               .fontSize(Typography.CAPTION)
-              .fontColor(Colors.PRIMARY)
+              .fontColor(ResourceColors.PRIMARY)
           }
         }
       }
@@ -37,14 +37,14 @@ export struct AIGenerationPanelComponent {
         Scroll() {
           Text(this.streamText.length > 0 ? this.streamText : '等待生成...')
             .fontSize(Typography.BODY)
-            .fontColor(this.streamText.length > 0 ? Colors.TEXT_PRIMARY : Colors.TEXT_HINT)
+            .fontColor(this.streamText.length > 0 ? ResourceColors.TEXT_PRIMARY : ResourceColors.TEXT_HINT)
             .fontFamily('monospace')
             .width('100%')
         }
         .width('100%')
         .constraintSize({ maxHeight: 200 })
         .scrollBar(BarState.Auto)
-        .backgroundColor(Colors.BG_SECONDARY)
+        .backgroundColor(ResourceColors.BG_SECONDARY)
         .borderRadius(Radius.MD)
         .padding(Spacing.BASE)
       }
@@ -56,10 +56,10 @@ export struct AIGenerationPanelComponent {
           .width('100%')
           .height(ComponentSize.BUTTON_HEIGHT)
           .fontSize(Typography.BODY_LARGE)
-          .fontColor(Colors.ERROR)
+          .fontColor(ResourceColors.ERROR)
           .backgroundColor('transparent')
           .borderWidth(1)
-          .borderColor(Colors.ERROR)
+          .borderColor(ResourceColors.ERROR)
           .borderRadius(Radius.SM)
           .onClick(() => {
             this.onStop()
@@ -70,8 +70,8 @@ export struct AIGenerationPanelComponent {
           .width('100%')
           .height(ComponentSize.BUTTON_HEIGHT)
           .fontSize(Typography.BODY_LARGE)
-          .fontColor(Colors.TEXT_ON_PRIMARY)
-          .backgroundColor(Colors.PRIMARY)
+          .fontColor(ResourceColors.TEXT_ON_PRIMARY)
+          .backgroundColor(ResourceColors.PRIMARY)
           .borderRadius(Radius.SM)
           .onClick(() => {
             this.onStart()
@@ -80,7 +80,7 @@ export struct AIGenerationPanelComponent {
     }
     .width('100%')
     .padding(Spacing.BASE)
-    .backgroundColor(Colors.BG_CARD)
+    .backgroundColor(ResourceColors.BG_CARD)
     .borderRadius(Radius.MD)
   }
 }

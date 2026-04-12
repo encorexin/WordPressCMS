@@ -1,35 +1,43 @@
 // 状态徽章组件 — 展示文章/站点状态标签
 
-import { Colors, Typography, Spacing, Radius } from '../../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius } from '../../constants/DesignTokens'
+
+/** 状态信息模型，避免动态属性访问 */
+interface StatusInfo {
+  label: string
+  bgColor: ResourceColor
+  textColor: ResourceColor
+}
 
 @Component
 export struct StatusBadge {
   @Prop status: string = 'draft'
 
-  private getStatusInfo(): Record<string, string> {
+  private getStatusInfo(): StatusInfo {
     switch (this.status) {
       case 'published':
-        return { label: '已发布', bgColor: '#E6F9EE', textColor: Colors.SUCCESS }
+        return { label: '已发布', bgColor: ResourceColors.SUCCESS_SOFT_BG, textColor: ResourceColors.SUCCESS }
       case 'draft':
-        return { label: '草稿', bgColor: '#FFF3E0', textColor: Colors.WARNING }
+        return { label: '草稿', bgColor: ResourceColors.BG_SECONDARY, textColor: ResourceColors.TEXT_SECONDARY }
       case 'generating':
-        return { label: '生成中', bgColor: '#E3F2FD', textColor: Colors.PRIMARY }
+        return { label: '生成中', bgColor: ResourceColors.INFO_SOFT_BG, textColor: ResourceColors.PRIMARY }
       case 'active':
-        return { label: '正常', bgColor: '#E6F9EE', textColor: Colors.SUCCESS }
+        return { label: '正常', bgColor: ResourceColors.SUCCESS_SOFT_BG, textColor: ResourceColors.SUCCESS }
       case 'inactive':
-        return { label: '停用', bgColor: '#F5F5F5', textColor: Colors.TEXT_HINT }
+        return { label: '停用', bgColor: ResourceColors.BG_SECONDARY, textColor: ResourceColors.TEXT_HINT }
       case 'error':
-        return { label: '异常', bgColor: '#FFEBEE', textColor: Colors.ERROR }
+        return { label: '异常', bgColor: ResourceColors.INFO_SOFT_BG, textColor: ResourceColors.ERROR }
       default:
-        return { label: this.status, bgColor: '#F5F5F5', textColor: Colors.TEXT_SECONDARY }
+        return { label: this.status, bgColor: ResourceColors.BG_SECONDARY, textColor: ResourceColors.TEXT_SECONDARY }
     }
   }
 
   build() {
-    Text(this.getStatusInfo()['label'])
+    const info: StatusInfo = this.getStatusInfo()
+    Text(info.label)
       .fontSize(Typography.CAPTION)
-      .fontColor(this.getStatusInfo()['textColor'])
-      .backgroundColor(this.getStatusInfo()['bgColor'])
+      .fontColor(info.textColor)
+      .backgroundColor(info.bgColor)
       .padding({ left: Spacing.SM, right: Spacing.SM, top: 2, bottom: 2 })
       .borderRadius(Radius.SM)
   }

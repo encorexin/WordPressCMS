@@ -1,6 +1,6 @@
 {
   "include": ["./src"],
-  "exclude": ["./src/**/*.test.ts", "./src/**/*.spec.ts", "./src/components/ui"],
+  "exclude": ["./src/**/*.test.ts", "./src/**/*.spec.ts", "./src/**/*.test.tsx", "./src/**/*.spec.tsx"],
   "compilerOptions": {
     "jsx": "react-jsx",
     "moduleResolution": "bundler",

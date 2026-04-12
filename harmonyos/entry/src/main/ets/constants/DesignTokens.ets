@@ -42,6 +42,47 @@ export class Colors {
   static readonly STATUS_GENERATING_TEXT: string = '#007DFF'
 }
 
+// 资源化颜色令牌（支持 base/dark 资源限定符自动切换）
+export class ResourceColors {
+  static readonly PRIMARY: ResourceColor = $r('app.color.primary')
+  static readonly PRIMARY_PRESSED: ResourceColor = $r('app.color.primary_pressed')
+  static readonly PRIMARY_DISABLED: ResourceColor = $r('app.color.primary_disabled')
+
+  static readonly BG_PRIMARY: ResourceColor = $r('app.color.bg_primary')
+  static readonly BG_SECONDARY: ResourceColor = $r('app.color.bg_secondary')
+  static readonly BG_CARD: ResourceColor = $r('app.color.bg_card')
+  static readonly OVERLAY_MASK: ResourceColor = $r('app.color.overlay_mask')
+  static readonly OVERLAY_MASK_STRONG: ResourceColor = $r('app.color.overlay_mask_strong')
+  static readonly SHADOW_FLOATING: ResourceColor = $r('app.color.shadow_floating')
+  static readonly INFO_SOFT_BG: ResourceColor = $r('app.color.info_soft_bg')
+  static readonly SUCCESS_SOFT_BG: ResourceColor = $r('app.color.success_soft_bg')
+  static readonly WARNING_SOFT_BG: ResourceColor = $r('app.color.warning_soft_bg')
+  static readonly ERROR_SOFT_BG: ResourceColor = $r('app.color.error_soft_bg')
+
+  static readonly TEXT_PRIMARY: ResourceColor = $r('app.color.text_primary')
+  static readonly TEXT_SECONDARY: ResourceColor = $r('app.color.text_secondary')
+  static readonly TEXT_HINT: ResourceColor = $r('app.color.text_hint')
+  static readonly TEXT_ON_PRIMARY: ResourceColor = $r('app.color.text_on_primary')
+
+  static readonly BORDER: ResourceColor = $r('app.color.border')
+  static readonly DIVIDER: ResourceColor = $r('app.color.divider')
+  static readonly ARROW: ResourceColor = $r('app.color.arrow')
+
+  static readonly SUCCESS: ResourceColor = $r('app.color.success')
+  static readonly WARNING: ResourceColor = $r('app.color.warning')
+  static readonly ERROR: ResourceColor = $r('app.color.error')
+
+  // 状态背景色（支持深浅模式）
+  static readonly STATUS_PUBLISHED_BG: ResourceColor = $r('app.color.success_soft_bg')
+  static readonly STATUS_PUBLISHED_TEXT: ResourceColor = $r('app.color.success')
+  static readonly STATUS_DRAFT_BG: ResourceColor = $r('app.color.bg_secondary')
+  static readonly STATUS_DRAFT_TEXT: ResourceColor = $r('app.color.text_secondary')
+  static readonly STATUS_PENDING_BG: ResourceColor = $r('app.color.warning_soft_bg')
+  static readonly STATUS_PENDING_TEXT: ResourceColor = $r('app.color.warning')
+  static readonly STATUS_GENERATING_BG: ResourceColor = $r('app.color.info_soft_bg')
+  static readonly STATUS_GENERATING_TEXT: ResourceColor = $r('app.color.primary')
+}
+
 export class Typography {
   static readonly TITLE_LARGE: number = 32
   static readonly TITLE: number = 24

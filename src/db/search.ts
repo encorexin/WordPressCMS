@@ -1,5 +1,5 @@
-import { db } from "./database";
-import type { LocalArticle, Keyword, ArticleTemplate, Topic } from "./database";
+import { getEncryptedArticles, getEncryptedKeywords, getEncryptedTemplates, getEncryptedTopics, hasEncryptionKey } from "./encryptedDatabase";
+import type { ArticleTemplate, Keyword, LocalArticle, Topic } from "./models";
 
 // 搜索结果类型
 export interface SearchResult {
@@ -27,6 +27,10 @@ export async function globalSearch(
   const searchTerm = query.toLowerCase().trim();
 
   if (!searchTerm) {
+    return [];
+  }
+
+  if (!userId || !hasEncryptionKey()) {
     return [];
   }
 
@@ -59,33 +63,18 @@ async function searchArticles(
   searchTerm: string,
   userId?: string
 ): Promise<SearchResult[]> {
-  let articles: LocalArticle[];
+  if (!userId || !hasEncryptionKey()) return [];
+  const articles = await getEncryptedArticles(userId);
+  const matched = articles
+    .filter(
+      (a) =>
+        a.title.toLowerCase().includes(searchTerm) ||
+        (a.content?.toLowerCase().includes(searchTerm) ?? false) ||
+        (a.keywords?.toLowerCase().includes(searchTerm) ?? false)
+    )
+    .slice(0, 10);
 
-  if (userId) {
-    articles = await db.articles
-      .where("user_id")
-      .equals(userId)
-      .filter(
-        (a) =>
-          a.title.toLowerCase().includes(searchTerm) ||
-          (a.content?.toLowerCase().includes(searchTerm) ?? false) ||
-          (a.keywords?.toLowerCase().includes(searchTerm) ?? false)
-      )
-      .limit(10)
-      .toArray();
-  } else {
-    articles = await db.articles
-      .filter(
-        (a) =>
-          a.title.toLowerCase().includes(searchTerm) ||
-          (a.content?.toLowerCase().includes(searchTerm) ?? false) ||
-          (a.keywords?.toLowerCase().includes(searchTerm) ?? false)
-      )
-      .limit(10)
-      .toArray();
-  }
-
-  return articles.map((article) => ({
+  return matched.map((article) => ({
     id: article.id,
     type: "article",
     title: article.title,
@@ -101,23 +90,13 @@ async function searchKeywords(
   searchTerm: string,
   userId?: string
 ): Promise<SearchResult[]> {
-  let keywords: Keyword[];
+  if (!userId || !hasEncryptionKey()) return [];
+  const keywords = await getEncryptedKeywords(userId);
+  const matched = keywords
+    .filter((k) => k.keyword.toLowerCase().includes(searchTerm))
+    .slice(0, 5);
 
-  if (userId) {
-    keywords = await db.keywords
-      .where("user_id")
-      .equals(userId)
-      .filter((k) => k.keyword.toLowerCase().includes(searchTerm))
-      .limit(5)
-      .toArray();
-  } else {
-    keywords = await db.keywords
-      .filter((k) => k.keyword.toLowerCase().includes(searchTerm))
-      .limit(5)
-      .toArray();
-  }
-
-  return keywords.map((keyword) => ({
+  return matched.map((keyword) => ({
     id: keyword.id,
     type: "keyword",
     title: keyword.keyword,
@@ -133,31 +112,15 @@ async function searchTemplates(
   searchTerm: string,
   userId?: string
 ): Promise<SearchResult[]> {
-  let templates: ArticleTemplate[];
+  if (!userId || !hasEncryptionKey()) return [];
+  const templates = await getEncryptedTemplates(userId);
+  const matched = templates
+    .filter(
+      (t) => t.name.toLowerCase().includes(searchTerm) || t.description.toLowerCase().includes(searchTerm)
+    )
+    .slice(0, 5);
 
-  if (userId) {
-    templates = await db.article_templates
-      .where("user_id")
-      .equals(userId)
-      .filter(
-        (t) =>
-          t.name.toLowerCase().includes(searchTerm) ||
-          t.description.toLowerCase().includes(searchTerm)
-      )
-      .limit(5)
-      .toArray();
-  } else {
-    templates = await db.article_templates
-      .filter(
-        (t) =>
-          t.name.toLowerCase().includes(searchTerm) ||
-          t.description.toLowerCase().includes(searchTerm)
-      )
-      .limit(5)
-      .toArray();
-  }
-
-  return templates.map((template) => ({
+  return matched.map((template) => ({
     id: template.id,
     type: "template",
     title: template.name,
@@ -173,33 +136,18 @@ async function searchTopics(
   searchTerm: string,
   userId?: string
 ): Promise<SearchResult[]> {
-  let topics: Topic[];
+  if (!userId || !hasEncryptionKey()) return [];
+  const topics = await getEncryptedTopics(userId);
+  const matched = topics
+    .filter(
+      (t) =>
+        t.title.toLowerCase().includes(searchTerm) ||
+        t.description.toLowerCase().includes(searchTerm) ||
+        t.keywords.toLowerCase().includes(searchTerm)
+    )
+    .slice(0, 5);
 
-  if (userId) {
-    topics = await db.topics
-      .where("user_id")
-      .equals(userId)
-      .filter(
-        (t) =>
-          t.title.toLowerCase().includes(searchTerm) ||
-          t.description.toLowerCase().includes(searchTerm) ||
-          t.keywords.toLowerCase().includes(searchTerm)
-      )
-      .limit(5)
-      .toArray();
-  } else {
-    topics = await db.topics
-      .filter(
-        (t) =>
-          t.title.toLowerCase().includes(searchTerm) ||
-          t.description.toLowerCase().includes(searchTerm) ||
-          t.keywords.toLowerCase().includes(searchTerm)
-      )
-      .limit(5)
-      .toArray();
-  }
-
-  return topics.map((topic) => ({
+  return matched.map((topic) => ({
     id: topic.id,
     type: "topic",
     title: topic.title,

@@ -1,4 +1,4 @@
-import { getEffectiveAISettings } from "@/db/aiSettings";
+import { getEffectiveAISettings } from "@/db/api";
 import { aiLogger } from "@/utils/logger";
 
 interface FetchKeywordsResult {
@@ -58,9 +58,9 @@ export async function fetchKeywordsFromAI(
         }
 
         const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || "";
+        const content = String(data?.choices?.[0]?.message?.content ?? "");
 
-        const keywords = content
+        const keywords: string[] = content
             .split("\n")
             .map((line: string) => line.trim())
             .filter((line: string) => line && !line.match(/^[\d\-\*\.]+\s*/))
@@ -100,7 +100,10 @@ export async function fetchKeywordsFromTrends(
         const data = await response.json();
 
         if (Array.isArray(data) && data.length > 1) {
-            const suggestions = data[1] as string[];
+            const rawSuggestions = data[1];
+            const suggestions = Array.isArray(rawSuggestions)
+                ? rawSuggestions.filter((item): item is string => typeof item === "string")
+                : [];
             return {
                 success: true,
                 keywords: suggestions.slice(0, 10),

@@ -12,7 +12,7 @@ export interface ToastOptions {
 
 export interface ConfirmButton {
   value: string
-  fontColor?: string
+  fontColor?: ResourceColor
   action: () => void
 }
 

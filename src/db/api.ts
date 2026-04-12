@@ -5,6 +5,8 @@
 
 // 从加密 API 重新导出所有内容
 export * from './encryptedApi';
+export * from './aiSettings';
+export * from './versionService';
 
 // 为了保持向后兼容，保留原有的类型导出
 export type {
@@ -15,4 +17,9 @@ export type {
     WordPressSiteInput,
     ArticleInput,
     ArticleWithSite,
+    AISettings,
+    ArticleTemplate,
+    Keyword,
+    Topic,
+    ArticleVersion,
 } from './encryptedApi';

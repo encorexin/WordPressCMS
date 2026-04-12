@@ -1,6 +1,6 @@
 // 关于页面 — 软件功能介绍、项目主页、作者信息、技术栈、开源许可
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
 
 @Component
 export struct AboutPageContent {
@@ -13,13 +13,13 @@ export struct AboutPageContent {
         Row() {
           SymbolGlyph($r('sys.symbol.chevron_left'))
             .fontSize(ComponentSize.ICON_LG)
-            .fontColor([Colors.TEXT_PRIMARY])
+            .fontColor([ResourceColors.TEXT_PRIMARY])
             .onClick(() => { this.navPathStack.pop() })
 
           Text('关于')
             .fontSize(Typography.TITLE)
             .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.PRIMARY)
             .margin({ left: Spacing.SM })
 
           Blank()
@@ -59,7 +59,7 @@ export struct AboutPageContent {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(Colors.BG_PRIMARY)
+      .backgroundColor(ResourceColors.BG_PRIMARY)
     }
     .hideTitleBar(true)
   }
@@ -77,17 +77,17 @@ export struct AboutPageContent {
       Text('WordPress CMS')
         .fontSize(Typography.TITLE)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.PRIMARY)
 
       Text('AI \u9a71\u52a8\u7684 WordPress \u5185\u5bb9\u7ba1\u7406\u7cfb\u7edf')
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
 
-      Text('v1.1.0')
+      Text('v1.3.0')
         .fontSize(Typography.CAPTION)
-        .fontColor(Colors.TEXT_HINT)
+        .fontColor(ResourceColors.TEXT_HINT)
         .padding({ left: Spacing.MD, right: Spacing.MD, top: Spacing.XS, bottom: Spacing.XS })
-        .backgroundColor(Colors.BG_SECONDARY)
+        .backgroundColor(ResourceColors.BG_SECONDARY)
       .borderRadius(Radius.FULL)
       .margin({ right: Spacing.SM, bottom: Spacing.SM })
     }
@@ -113,7 +113,7 @@ export struct AboutPageContent {
     }
     .width('100%')
     .padding(Spacing.BASE)
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
     .borderRadius(Radius.LG)
   }
 
@@ -128,7 +128,7 @@ export struct AboutPageContent {
     }
     .width('100%')
     .padding(Spacing.BASE)
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
     .borderRadius(Radius.LG)
   }
 
@@ -141,18 +141,18 @@ export struct AboutPageContent {
         Column() {
           SymbolGlyph($r('sys.symbol.person_2'))
             .fontSize(40)
-            .fontColor([Colors.PRIMARY])
+            .fontColor([ResourceColors.PRIMARY])
         }
 
         Column({ space: Spacing.XS }) {
           Text('encorexin')
             .fontSize(Typography.BODY_LARGE)
             .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
 
           Text('github.com/encorexin')
             .fontSize(Typography.CAPTION)
-            .fontColor(Colors.PRIMARY)
+            .fontColor(ResourceColors.PRIMARY)
         }
         .alignItems(HorizontalAlign.Start)
       }
@@ -161,7 +161,7 @@ export struct AboutPageContent {
     }
     .width('100%')
     .padding(Spacing.BASE)
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
     .borderRadius(Radius.LG)
   }
 
@@ -186,7 +186,7 @@ export struct AboutPageContent {
     }
     .width('100%')
     .padding(Spacing.BASE)
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
     .borderRadius(Radius.LG)
   }
 
@@ -198,16 +198,16 @@ export struct AboutPageContent {
       Text('MIT License')
         .fontSize(Typography.BODY_LARGE)
         .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
 
-      Text('Copyright (c) 2024-2025 encorexin\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.')
+      Text('Copyright (c) 2026 encorexin\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the "Software"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.')
         .fontSize(Typography.CAPTION)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
         .lineHeight(18)
     }
     .width('100%')
     .padding(Spacing.BASE)
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
     .borderRadius(Radius.LG)
   }
 
@@ -216,7 +216,7 @@ export struct AboutPageContent {
     Text(title)
       .fontSize(Typography.SUBTITLE)
       .fontWeight(FontWeight.Bold)
-      .fontColor(Colors.TEXT_PRIMARY)
+      .fontColor(ResourceColors.TEXT_PRIMARY)
       .width('100%')
   }
 
@@ -225,18 +225,18 @@ export struct AboutPageContent {
     Row({ space: Spacing.MD }) {
       SymbolGlyph($r(`sys.symbol.${iconName}`))
         .fontSize(ComponentSize.ICON_MD)
-        .fontColor([Colors.PRIMARY])
+        .fontColor([ResourceColors.PRIMARY])
         .margin({ top: 2 })
 
       Column({ space: 2 }) {
         Text(title)
           .fontSize(Typography.BODY)
           .fontWeight(FontWeight.Medium)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
 
         Text(desc)
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
           .lineHeight(16)
       }
       .layoutWeight(1)
@@ -251,13 +251,13 @@ export struct AboutPageContent {
     Row() {
       Text(label)
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
 
       Blank()
 
       Text(value)
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
         .fontWeight(FontWeight.Medium)
     }
     .width('100%')
@@ -268,9 +268,9 @@ export struct AboutPageContent {
   TechBadge(name: string) {
     Text(name)
       .fontSize(Typography.CAPTION)
-      .fontColor(Colors.PRIMARY)
+      .fontColor(ResourceColors.PRIMARY)
       .padding({ left: Spacing.MD, right: Spacing.MD, top: Spacing.XS, bottom: Spacing.XS })
-      .backgroundColor('#E6F0FF')
+      .backgroundColor(ResourceColors.BG_PRIMARY)
       .borderRadius(Radius.FULL)
       .margin({ right: Spacing.SM, bottom: Spacing.SM })
   }

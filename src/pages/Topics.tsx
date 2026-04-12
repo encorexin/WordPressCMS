@@ -38,9 +38,9 @@ import {
     deleteTopic,
     deleteUsedTopics,
     markTopicAsUsed,
+    getEffectiveAISettings,
     type Topic,
-} from "@/db/topicService";
-import { getEffectiveAISettings } from "@/db/aiSettings";
+} from "@/db/api";
 import { sendChatStream } from "@/utils/aiChat";
 
 export default function Topics() {
@@ -115,8 +115,9 @@ export default function Topics() {
     };
 
     const handleDelete = async (topic: Topic) => {
+        if (!user?.id) return;
         try {
-            await deleteTopic(topic.id);
+            await deleteTopic(user.id, topic.id);
             toast.success("已删除");
             await loadTopics();
         } catch (error) {
@@ -125,8 +126,9 @@ export default function Topics() {
     };
 
     const handleMarkUsed = async (topic: Topic) => {
+        if (!user?.id) return;
         try {
-            await markTopicAsUsed(topic.id);
+            await markTopicAsUsed(user.id, topic.id);
             toast.success("已标记为已使用");
             await loadTopics();
         } catch (error) {

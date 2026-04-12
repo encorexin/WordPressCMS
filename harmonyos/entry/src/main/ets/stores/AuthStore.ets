@@ -1,45 +1,51 @@
 // 认证状态管理 — AppStorage 驱动登录状态
 
+import { AppStorageKeys, UserRole } from '../constants/AppStorageKeys'
+
 export class AuthStore {
 
   // 初始化认证状态（在 EntryAbility.onCreate 中调用）
   static initialize(): void {
-    AppStorage.setOrCreate<boolean>('isLoggedIn', false)
-    AppStorage.setOrCreate<string>('currentUserId', '')
-    AppStorage.setOrCreate<string>('currentUserRole', '')
+    AppStorage.setOrCreate<boolean>(AppStorageKeys.IS_LOGGED_IN, false)
+    AppStorage.setOrCreate<string>(AppStorageKeys.CURRENT_USER_ID, '')
+    AppStorage.setOrCreate<string>(AppStorageKeys.CURRENT_USER_ROLE, UserRole.User)
   }
 
   // 是否已登录
   static isLoggedIn(): boolean {
-    return AppStorage.get<boolean>('isLoggedIn') || false
+    return AppStorage.get<boolean>(AppStorageKeys.IS_LOGGED_IN) || false
   }
 
   // 获取当前用户 ID
   static getCurrentUserId(): string {
-    return AppStorage.get<string>('currentUserId') || ''
+    return AppStorage.get<string>(AppStorageKeys.CURRENT_USER_ID) || ''
   }
 
   // 获取当前用户角色
-  static getCurrentUserRole(): string {
-    return AppStorage.get<string>('currentUserRole') || ''
+  static getCurrentUserRole(): UserRole {
+    const role = AppStorage.get<string>(AppStorageKeys.CURRENT_USER_ROLE) || UserRole.User
+    if (role === UserRole.Admin) {
+      return UserRole.Admin
+    }
+    return UserRole.User
   }
 
   // 是否为管理员
   static isAdmin(): boolean {
-    return AuthStore.getCurrentUserRole() === 'admin'
+    return AuthStore.getCurrentUserRole() === UserRole.Admin
   }
 
   // 写入登录状态
-  static setLoggedIn(userId: string, role: string): void {
-    AppStorage.set<boolean>('isLoggedIn', true)
-    AppStorage.set<string>('currentUserId', userId)
-    AppStorage.set<string>('currentUserRole', role)
+  static setLoggedIn(userId: string, role: UserRole): void {
+    AppStorage.set<boolean>(AppStorageKeys.IS_LOGGED_IN, true)
+    AppStorage.set<string>(AppStorageKeys.CURRENT_USER_ID, userId)
+    AppStorage.set<string>(AppStorageKeys.CURRENT_USER_ROLE, role)
   }
 
   // 清除登录状态
   static clearAuth(): void {
-    AppStorage.set<boolean>('isLoggedIn', false)
-    AppStorage.set<string>('currentUserId', '')
-    AppStorage.set<string>('currentUserRole', '')
+    AppStorage.set<boolean>(AppStorageKeys.IS_LOGGED_IN, false)
+    AppStorage.set<string>(AppStorageKeys.CURRENT_USER_ID, '')
+    AppStorage.set<string>(AppStorageKeys.CURRENT_USER_ROLE, UserRole.User)
   }
 }

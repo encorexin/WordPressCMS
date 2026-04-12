@@ -3,17 +3,16 @@
  * 所有数据操作都通过加密存储进行
  */
 
-import { generateId, getTimestamp } from "./database";
+import { generateId, getTimestamp } from "./models";
 import type {
     LocalUser,
     LocalWordPressSite,
     LocalArticle,
-    AISettings,
     ArticleTemplate,
     Keyword,
     Topic,
-    ArticleVersion
-} from "./database";
+} from "./models";
+export type { AISettings, ArticleTemplate, Keyword, Topic, ArticleVersion } from "./models";
 import {
     getEncryptedArticles,
     saveEncryptedArticle,
@@ -22,8 +21,6 @@ import {
     getEncryptedSites,
     saveEncryptedSite,
     deleteEncryptedSite,
-    getEncryptedAISettings,
-    saveEncryptedAISettings,
     getEncryptedTemplates,
     saveEncryptedTemplate,
     deleteEncryptedTemplate,
@@ -33,14 +30,15 @@ import {
     getEncryptedTopics,
     saveEncryptedTopic,
     deleteEncryptedTopic,
-    getEncryptedArticleVersions,
-    saveEncryptedArticleVersion,
-    deleteEncryptedArticleVersion,
+    setEncryptedKeywords,
+    setEncryptedTopics,
+    setEncryptedTemplates,
     exportUserData,
     importUserData,
     clearUserData,
     hasEncryptionKey
 } from "./encryptedDatabase";
+import { db } from "./database";
 
 // 重新导出类型以保持兼容性
 export type Profile = LocalUser;
@@ -78,13 +76,11 @@ function checkEncryptionKey(): void {
 
 export async function getProfile(userId: string): Promise<Profile | null> {
     // 用户信息不加密存储，保持与认证系统兼容
-    const { db } = await import('./database');
     const user = await db.users.get(userId);
     return user ?? null;
 }
 
 export async function getAllProfiles(): Promise<Profile[]> {
-    const { db } = await import('./database');
     return await db.users.orderBy('created_at').reverse().toArray();
 }
 
@@ -92,7 +88,6 @@ export async function updateProfile(
     userId: string,
     updates: Partial<Profile>
 ): Promise<Profile> {
-    const { db } = await import('./database');
     await db.users.update(userId, updates);
     const updated = await db.users.get(userId);
     if (!updated) throw new Error("更新失败");
@@ -280,41 +275,6 @@ export async function updateArticleStatus(
     await saveEncryptedArticle(userId, updatedArticle);
 }
 
-// ============ AI Settings API ============
-
-export async function getAISettings(userId: string): Promise<AISettings | null> {
-    checkEncryptionKey();
-    return await getEncryptedAISettings(userId);
-}
-
-export async function saveAISettings(
-    userId: string,
-    settings: Partial<AISettings>
-): Promise<void> {
-    checkEncryptionKey();
-    const existing = await getEncryptedAISettings(userId);
-
-    const newSettings: AISettings = {
-        id: existing?.id || generateId(),
-        user_id: userId,
-        api_endpoint: settings.api_endpoint || existing?.api_endpoint || '',
-        api_key: settings.api_key || existing?.api_key || '',
-        model: settings.model || existing?.model || '',
-        system_prompt: settings.system_prompt || existing?.system_prompt || '',
-        image_enabled: settings.image_enabled ?? existing?.image_enabled ?? false,
-        image_provider: settings.image_provider || existing?.image_provider || '',
-        image_api_key: settings.image_api_key || existing?.image_api_key || '',
-        image_endpoint: settings.image_endpoint || existing?.image_endpoint || '',
-        image_model: settings.image_model || existing?.image_model || '',
-        slug_enabled: settings.slug_enabled ?? existing?.slug_enabled ?? true,
-        slug_model: settings.slug_model || existing?.slug_model || '',
-        created_at: existing?.created_at || getTimestamp(),
-        updated_at: getTimestamp(),
-    };
-
-    await saveEncryptedAISettings(userId, newSettings);
-}
-
 // ============ Templates API ============
 
 export async function getTemplates(userId?: string): Promise<ArticleTemplate[]> {
@@ -365,6 +325,205 @@ export async function deleteTemplate(userId: string, templateId: string): Promis
     await deleteEncryptedTemplate(userId, templateId);
 }
 
+export const DEFAULT_TEMPLATES = [
+    {
+        name: '技术教程',
+        description: '适用于技术文章、编程教程等',
+        system_prompt: `你是一位经验丰富的技术作者，擅长撰写清晰易懂的技术教程。
+
+请根据用户提供的关键词创作一篇技术教程文章：
+
+要求：
+1. 使用通俗易懂的语言解释技术概念
+2. 包含代码示例（如适用）
+3. 分步骤讲解，循序渐进
+4. 提供实践建议和注意事项
+5. 使用 Markdown 格式，代码块需标注语言
+6. 字数 1000-1500 字`,
+    },
+    {
+        name: '产品评测',
+        description: '适用于产品介绍、评测类文章',
+        system_prompt: `你是一位专业的产品评测作者，擅长客观分析产品优缺点。
+
+请根据用户提供的关键词创作一篇产品评测文章：
+
+要求：
+1. 客观公正地分析产品特点
+2. 从多个维度评价（功能、性能、价格、用户体验等）
+3. 列出产品优点和缺点
+4. 与同类产品进行对比（如适用）
+5. 给出购买建议
+6. 使用 Markdown 格式
+7. 字数 800-1200 字`,
+    },
+    {
+        name: 'SEO 文章',
+        description: '适用于搜索引擎优化的内容',
+        system_prompt: `你是一位 SEO 内容专家，擅长撰写对搜索引擎友好的文章。
+
+请根据用户提供的关键词创作一篇 SEO 优化文章：
+
+要求：
+1. 关键词自然融入标题和正文
+2. 使用清晰的标题层级（H1、H2、H3）
+3. 开头段落包含核心关键词
+4. 每个段落聚焦一个主题
+5. 适当使用列表和表格
+6. 结尾包含 CTA（行动号召）
+7. 使用 Markdown 格式
+8. 字数 1000-1500 字`,
+    },
+    {
+        name: '新闻稿',
+        description: '适用于新闻报道、公告类文章',
+        system_prompt: `你是一位专业的新闻编辑，擅长撰写客观准确的新闻稿。
+
+请根据用户提供的关键词创作一篇新闻稿：
+
+要求：
+1. 遵循新闻写作规范（倒金字塔结构）
+2. 开头概括核心内容（5W1H）
+3. 语言客观、准确、简洁
+4. 引用相关数据和事实
+5. 保持中立立场
+6. 使用 Markdown 格式
+7. 字数 500-800 字`,
+    },
+    {
+        name: '博客文章',
+        description: '适用于个人博客、生活分享',
+        system_prompt: `你是一位有亲和力的博客作者，擅长用轻松的语气分享见解。
+
+请根据用户提供的关键词创作一篇博客文章：
+
+要求：
+1. 语气亲切、自然，像与朋友对话
+2. 融入个人观点和感受
+3. 使用生动的比喻和例子
+4. 段落简短，易于阅读
+5. 可以适当使用表情符号
+6. 使用 Markdown 格式
+7. 字数 800-1200 字`,
+    },
+    {
+        name: '操作指南',
+        description: '适用于步骤教程、使用说明',
+        system_prompt: `你是一位技术文档专家，擅长撰写清晰的操作指南。
+
+请根据用户提供的关键词创作一篇操作指南：
+
+要求：
+1. 使用编号列表，步骤清晰
+2. 每个步骤独立、具体、可执行
+3. 包含必要的前置条件和注意事项
+4. 适当配合说明性文字
+5. 使用 Markdown 格式
+6. 字数 600-1000 字`,
+    },
+    {
+        name: '清单文章',
+        description: '适用于 Top 10、盘点类文章',
+        system_prompt: `你是一位内容策划专家，擅长撰写引人入胜的清单类文章。
+
+请根据用户提供的关键词创作一篇清单文章：
+
+要求：
+1. 标题吸引眼球（如"10个必知的..."）
+2. 每个条目独立成段，有小标题
+3. 内容多样，覆盖不同角度
+4. 提供实用价值
+5. 结尾有总结
+6. 使用 Markdown 格式
+7. 字数 1000-1500 字`,
+    },
+    {
+        name: '品牌故事',
+        description: '适用于企业介绍、品牌宣传',
+        system_prompt: `你是一位品牌文案专家，擅长讲述动人的品牌故事。
+
+请根据用户提供的关键词创作一篇品牌故事：
+
+要求：
+1. 突出品牌理念和价值观
+2. 融入创始故事或发展历程
+3. 情感共鸣，建立连接
+4. 突出差异化优势
+5. 结尾有行动号召
+6. 使用 Markdown 格式
+7. 字数 600-1000 字`,
+    },
+    {
+        name: '知识科普',
+        description: '适用于科普解读、知识分享',
+        system_prompt: `你是一位知识传播专家，擅长将复杂概念用简单语言解释。
+
+请根据用户提供的关键词创作一篇知识科普文章：
+
+要求：
+1. 从基础概念讲起
+2. 使用通俗比喻帮助理解
+3. 循序渐进，层层深入
+4. 举例说明，贴近生活
+5. 总结要点，加深记忆
+6. 使用 Markdown 格式
+7. 字数 800-1200 字`,
+    },
+    {
+        name: '社媒文案',
+        description: '适用于微信公众号、社交媒体',
+        system_prompt: `你是一位社交媒体运营专家，擅长撰写吸引眼球的社媒文案。
+
+请根据用户提供的关键词创作一篇社媒文案：
+
+要求：
+1. 开头抓住注意力（钩子文案）
+2. 语言简洁有力，金句频出
+3. 段落短小，适合手机阅读
+4. 善用分隔符和留白
+5. 结尾引导互动或行动
+6. 使用 Markdown 格式
+7. 字数 500-800 字`,
+    },
+];
+
+export async function initDefaultTemplates(userId: string): Promise<void> {
+    checkEncryptionKey();
+    const existingTemplates = await getTemplates(userId);
+    const existingNames = new Set(existingTemplates.map(t => t.name));
+
+    for (const template of DEFAULT_TEMPLATES) {
+        if (!existingNames.has(template.name)) {
+            await createTemplate(userId, template);
+        }
+    }
+}
+
+export async function cleanDuplicateTemplates(userId: string): Promise<number> {
+    checkEncryptionKey();
+    const templates = await getTemplates(userId);
+
+    const sorted = [...templates].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    const seen = new Set<string>();
+    const kept: ArticleTemplate[] = [];
+    let deletedCount = 0;
+
+    for (const template of sorted) {
+        if (seen.has(template.name)) {
+            deletedCount++;
+            continue;
+        }
+        seen.add(template.name);
+        kept.push(template);
+    }
+
+    if (deletedCount > 0) {
+        await setEncryptedTemplates(userId, kept);
+    }
+
+    return deletedCount;
+}
+
 // ============ Keywords API ============
 
 export async function getKeywords(userId?: string): Promise<Keyword[]> {
@@ -375,13 +534,20 @@ export async function getKeywords(userId?: string): Promise<Keyword[]> {
 
 export async function createKeyword(
     userId: string,
-    keywordData: Omit<Keyword, 'id' | 'user_id' | 'created_at'>
+    keywordData: { keyword: string; group_name?: string; use_count?: number }
 ): Promise<Keyword> {
     checkEncryptionKey();
+    const keywords = await getEncryptedKeywords(userId);
+    const exists = keywords.some(k => k.keyword === keywordData.keyword);
+    if (exists) {
+        throw new Error('关键词已存在');
+    }
     const newKeyword: Keyword = {
         id: generateId(),
         user_id: userId,
-        ...keywordData,
+        keyword: keywordData.keyword,
+        group_name: keywordData.group_name || '未分组',
+        use_count: keywordData.use_count ?? 0,
         created_at: getTimestamp(),
     };
 
@@ -413,6 +579,102 @@ export async function deleteKeyword(userId: string, keywordId: string): Promise<
     await deleteEncryptedKeyword(userId, keywordId);
 }
 
+export async function getKeywordsByGroup(userId: string): Promise<Record<string, Keyword[]>> {
+    checkEncryptionKey();
+    const keywords = await getEncryptedKeywords(userId);
+    const grouped: Record<string, Keyword[]> = {};
+
+    for (const kw of keywords) {
+        const group = kw.group_name || '未分组';
+        if (!grouped[group]) {
+            grouped[group] = [];
+        }
+        grouped[group].push(kw);
+    }
+
+    return grouped;
+}
+
+export async function getGroups(userId: string): Promise<string[]> {
+    checkEncryptionKey();
+    const keywords = await getEncryptedKeywords(userId);
+    const groups = new Set<string>();
+
+    for (const kw of keywords) {
+        groups.add(kw.group_name || '未分组');
+    }
+
+    return Array.from(groups);
+}
+
+export async function createKeywordsBatch(
+    userId: string,
+    keywords: string[],
+    groupName: string = '未分组'
+): Promise<{ created: number; skipped: number }> {
+    checkEncryptionKey();
+    const existing = await getEncryptedKeywords(userId);
+    const existingSet = new Set(existing.map(k => k.keyword));
+
+    let created = 0;
+    let skipped = 0;
+    const now = getTimestamp();
+
+    const toAdd: Keyword[] = [];
+    for (const kw of keywords) {
+        const trimmed = kw.trim();
+        if (!trimmed) continue;
+        if (existingSet.has(trimmed)) {
+            skipped++;
+            continue;
+        }
+        existingSet.add(trimmed);
+        created++;
+        toAdd.push({
+            id: generateId(),
+            user_id: userId,
+            keyword: trimmed,
+            group_name: groupName || '未分组',
+            use_count: 0,
+            created_at: now,
+        });
+    }
+
+    if (toAdd.length > 0) {
+        await setEncryptedKeywords(userId, [...existing, ...toAdd]);
+    }
+
+    return { created, skipped };
+}
+
+export async function deleteKeywordsByGroup(userId: string, groupName: string): Promise<number> {
+    checkEncryptionKey();
+    const keywords = await getEncryptedKeywords(userId);
+    const toDeleteCount = keywords.filter(kw => (kw.group_name || '未分组') === groupName).length;
+    if (toDeleteCount === 0) {
+        return 0;
+    }
+    const kept = keywords.filter(kw => (kw.group_name || '未分组') !== groupName);
+    await setEncryptedKeywords(userId, kept);
+    return toDeleteCount;
+}
+
+export async function incrementKeywordUsage(userId: string, keywordId: string): Promise<void> {
+    checkEncryptionKey();
+    const keywords = await getEncryptedKeywords(userId);
+    const target = keywords.find(k => k.id === keywordId);
+    if (!target) return;
+    const next = keywords.map(k => (k.id === keywordId ? { ...k, use_count: k.use_count + 1 } : k));
+    await setEncryptedKeywords(userId, next);
+}
+
+export async function searchKeywords(userId: string, query: string): Promise<Keyword[]> {
+    checkEncryptionKey();
+    const keywords = await getEncryptedKeywords(userId);
+    const lowerQuery = query.toLowerCase();
+    return keywords.filter(kw => kw.keyword.toLowerCase().includes(lowerQuery));
+}
+
 // ============ Topics API ============
 
 export async function getTopics(userId?: string): Promise<Topic[]> {
@@ -423,13 +685,17 @@ export async function getTopics(userId?: string): Promise<Topic[]> {
 
 export async function createTopic(
     userId: string,
-    topicData: Omit<Topic, 'id' | 'user_id' | 'created_at'>
+    topicData: { title: string; description: string; keywords: string; category: string; used?: boolean }
 ): Promise<Topic> {
     checkEncryptionKey();
     const newTopic: Topic = {
         id: generateId(),
         user_id: userId,
-        ...topicData,
+        title: topicData.title,
+        description: topicData.description,
+        keywords: topicData.keywords,
+        category: topicData.category || '未分类',
+        used: topicData.used ?? false,
         created_at: getTimestamp(),
     };
 
@@ -461,35 +727,102 @@ export async function deleteTopic(userId: string, topicId: string): Promise<void
     await deleteEncryptedTopic(userId, topicId);
 }
 
-// ============ Article Versions API ============
-
-export async function getArticleVersions(
-    userId: string,
-    articleId: string
-): Promise<ArticleVersion[]> {
+export async function getUnusedTopics(userId: string): Promise<Topic[]> {
     checkEncryptionKey();
-    return await getEncryptedArticleVersions(userId, articleId);
+    const topics = await getEncryptedTopics(userId);
+    return topics.filter(t => !t.used);
 }
 
-export async function createArticleVersion(
-    userId: string,
-    versionData: Omit<ArticleVersion, 'id' | 'user_id' | 'created_at'>
-): Promise<ArticleVersion> {
+export async function getTopicsByCategory(userId: string): Promise<Record<string, Topic[]>> {
     checkEncryptionKey();
-    const newVersion: ArticleVersion = {
-        id: generateId(),
-        user_id: userId,
-        ...versionData,
-        created_at: getTimestamp(),
-    };
+    const topics = await getEncryptedTopics(userId);
+    const grouped: Record<string, Topic[]> = {};
 
-    await saveEncryptedArticleVersion(userId, newVersion);
-    return newVersion;
+    for (const topic of topics) {
+        const category = topic.category || '未分类';
+        if (!grouped[category]) {
+            grouped[category] = [];
+        }
+        grouped[category].push(topic);
+    }
+
+    return grouped;
 }
 
-export async function deleteArticleVersion(userId: string, versionId: string): Promise<void> {
+export async function createTopicsBatch(
+    userId: string,
+    topics: { title: string; description: string; keywords: string; category: string }[]
+): Promise<number> {
     checkEncryptionKey();
-    await deleteEncryptedArticleVersion(userId, versionId);
+    const existing = await getEncryptedTopics(userId);
+    let created = 0;
+    const now = getTimestamp();
+    const toAdd: Topic[] = [];
+
+    for (const data of topics) {
+        if (!data.title.trim()) {
+            continue;
+        }
+        created++;
+        toAdd.push({
+            id: generateId(),
+            user_id: userId,
+            title: data.title,
+            description: data.description,
+            keywords: data.keywords,
+            category: data.category || '未分类',
+            used: false,
+            created_at: now,
+        });
+    }
+
+    if (toAdd.length > 0) {
+        await setEncryptedTopics(userId, [...existing, ...toAdd]);
+    }
+
+    return created;
+}
+
+export async function markTopicAsUsed(userId: string, topicId: string): Promise<void> {
+    checkEncryptionKey();
+    const topics = await getEncryptedTopics(userId);
+    const next = topics.map(t => (t.id === topicId ? { ...t, used: true } : t));
+    await setEncryptedTopics(userId, next);
+}
+
+export async function deleteUsedTopics(userId: string): Promise<number> {
+    checkEncryptionKey();
+    const topics = await getEncryptedTopics(userId);
+    const usedCount = topics.filter(t => t.used).length;
+    if (usedCount === 0) {
+        return 0;
+    }
+    const kept = topics.filter(t => !t.used);
+    await setEncryptedTopics(userId, kept);
+    return usedCount;
+}
+
+export async function getCategories(userId: string): Promise<string[]> {
+    checkEncryptionKey();
+    const topics = await getEncryptedTopics(userId);
+    const categories = new Set<string>();
+
+    for (const topic of topics) {
+        categories.add(topic.category || '未分类');
+    }
+
+    return Array.from(categories);
+}
+
+export async function searchTopics(userId: string, query: string): Promise<Topic[]> {
+    checkEncryptionKey();
+    const topics = await getEncryptedTopics(userId);
+    const lowerQuery = query.toLowerCase();
+    return topics.filter(topic =>
+        topic.title.toLowerCase().includes(lowerQuery) ||
+        topic.description.toLowerCase().includes(lowerQuery) ||
+        topic.keywords.toLowerCase().includes(lowerQuery)
+    );
 }
 
 // ============ Statistics API ============

@@ -1,17 +1,15 @@
 // 关键词表 CRUD
 
 import relationalStore from '@ohos.data.relationalStore'
-import { DatabaseHelper } from './DatabaseHelper'
 import { DatabaseSchema } from '../../constants/DatabaseSchema'
 import { Keyword } from '../../models/Keyword'
 import { generateId } from '../../utils/IdGenerator'
 import { getTimestamp } from '../../utils/DateUtil'
 import { Logger } from '../../utils/Logger'
+import { BaseDao } from './BaseDao'
 
 export class KeywordDao {
-  private static getStore(): relationalStore.RdbStore {
-    return DatabaseHelper.getStore()
-  }
+  private static readonly baseDao: BaseDao<Keyword> = new BaseDao<Keyword>(DatabaseSchema.TABLE_KEYWORDS, KeywordDao.fromResultSet)
 
   static async insert(userId: string, keyword: string, groupName: string = ''): Promise<Keyword> {
     try {
@@ -31,7 +29,7 @@ export class KeywordDao {
         'use_count': kw.useCount,
         'created_at': kw.createdAt
       }
-      await KeywordDao.getStore().insert(DatabaseSchema.TABLE_KEYWORDS, bucket)
+      await KeywordDao.baseDao.getStore().insert(DatabaseSchema.TABLE_KEYWORDS, bucket)
       return kw
     } catch (err) {
       throw new Error(`Failed to insert keyword: ${String(err)}`)
@@ -39,51 +37,31 @@ export class KeywordDao {
   }
 
   static async findByUserId(userId: string): Promise<Keyword[]> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_KEYWORDS)
       predicates.equalTo('user_id', userId)
       predicates.orderByDesc('use_count')
-      resultSet = await KeywordDao.getStore().query(predicates)
-      const list: Keyword[] = []
-      while (resultSet.goToNextRow()) {
-        list.push(KeywordDao.fromResultSet(resultSet))
-      }
-      return list
+      return await KeywordDao.baseDao.queryList(predicates, 'KeywordDao.findByUserId')
     } catch (err) {
       throw new Error(`Failed to find keywords by user: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
   static async findByGroup(userId: string, groupName: string): Promise<Keyword[]> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_KEYWORDS)
       predicates.equalTo('user_id', userId)
       predicates.equalTo('group_name', groupName)
       predicates.orderByDesc('use_count')
-      resultSet = await KeywordDao.getStore().query(predicates)
-      const list: Keyword[] = []
-      while (resultSet.goToNextRow()) {
-        list.push(KeywordDao.fromResultSet(resultSet))
-      }
-      return list
+      return await KeywordDao.baseDao.queryList(predicates, 'KeywordDao.findByGroup')
     } catch (err) {
       throw new Error(`Failed to find keywords by group: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
   static async incrementUseCount(id: string): Promise<void> {
     try {
-      const store = KeywordDao.getStore()
+      const store = KeywordDao.baseDao.getStore()
       await store.executeSql(
         `UPDATE ${DatabaseSchema.TABLE_KEYWORDS} SET use_count = use_count + 1 WHERE id = ?`,
         [id]
@@ -95,21 +73,22 @@ export class KeywordDao {
   }
 
   static async findById(id: string): Promise<Keyword | null> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_KEYWORDS)
       predicates.equalTo('id', id)
-      resultSet = await KeywordDao.getStore().query(predicates)
-      if (resultSet.goToFirstRow()) {
-        return KeywordDao.fromResultSet(resultSet)
-      }
-      return null
+      return await KeywordDao.baseDao.queryFirst(predicates, 'KeywordDao.findById')
     } catch (err) {
       throw new Error(`Failed to find keyword by id: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
+    }
+  }
+
+  static async countByUserId(userId: string): Promise<number> {
+    try {
+      const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_KEYWORDS)
+      predicates.equalTo('user_id', userId)
+      return await KeywordDao.baseDao.count(predicates, 'KeywordDao.countByUserId')
+    } catch (err) {
+      throw new Error(`Failed to count keywords: ${String(err)}`)
     }
   }
 
@@ -122,7 +101,7 @@ export class KeywordDao {
         'group_name': keyword.groupName.length > 0 ? keyword.groupName : null,
         'use_count': keyword.useCount
       }
-      await KeywordDao.getStore().update(bucket, predicates)
+      await KeywordDao.baseDao.getStore().update(bucket, predicates)
     } catch (err) {
       throw new Error(`Failed to update keyword: ${String(err)}`)
     }
@@ -132,13 +111,13 @@ export class KeywordDao {
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_KEYWORDS)
       predicates.equalTo('id', id)
-      await KeywordDao.getStore().delete(predicates)
+      await KeywordDao.baseDao.getStore().delete(predicates)
     } catch (err) {
       throw new Error(`Failed to delete keyword: ${String(err)}`)
     }
   }
 
-  private static fromResultSet(rs: relationalStore.ResultSet): Keyword {
+  static fromResultSet(rs: relationalStore.ResultSet): Keyword {
     try {
       const kw = new Keyword()
       kw.id = rs.getString(rs.getColumnIndex('id'))

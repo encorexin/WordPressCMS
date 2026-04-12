@@ -136,7 +136,7 @@ export function unwrapOr<T>(result: Result<T>, defaultValue: T): T {
 }
 
 export function unwrap<T>(result: Result<T>): T {
-    if (!result.success) {
+    if (result.success === false) {
         throw new AppException(
             result.error.code as ErrorCode,
             result.error.message,

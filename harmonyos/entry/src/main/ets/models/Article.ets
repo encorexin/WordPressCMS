@@ -10,6 +10,8 @@ export class Article {
   template: string = ''
   status: string = 'draft'
   wordpressPostId: string = ''
+  wordCount: number = 0
+  tokensUsed: number = 0
   createdAt: string = ''
   updatedAt: string = ''
 }

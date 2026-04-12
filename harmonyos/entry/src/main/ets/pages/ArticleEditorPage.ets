@@ -4,9 +4,17 @@
 import http from '@ohos.net.http'
 import { picker } from '@kit.CoreFileKit'
 import { fileIo as fs } from '@kit.CoreFileKit'
+import { webview } from '@kit.ArkWeb'
+import { ConfigurationConstant } from '@kit.AbilityKit'
+import { ArticleEditorFormatToolbarComponent } from '../components/article/ArticleEditorFormatToolbar'
+import { ArticleEditorPanelTabsComponent } from '../components/article/ArticleEditorPanelTabs'
+import { ArticlePreviewSheetComponent } from '../components/article/ArticlePreviewSheet'
+import { ArticlePublishPanelComponent } from '../components/article/ArticlePublishPanel'
+import { ArticleSiteQuickSelectComponent } from '../components/article/ArticleSiteQuickSelect'
+import { ArticleVersionPanelComponent } from '../components/article/ArticleVersionPanel'
 import { UiFeedback } from '../utils/UiFeedback'
-import { Colors, Typography, Spacing, Radius, ComponentSize, AnimDuration } from '../constants/DesignTokens'
-import { Routes } from '../constants/Routes'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
+import { Routes, ArticleEditorNavParam } from '../constants/Routes'
 import { Article } from '../models/Article'
 import { ArticleTemplate } from '../models/ArticleTemplate'
 import { AISettingsModel } from '../models/AISettings'
@@ -21,14 +29,18 @@ import { AISettingsDao } from '../services/db/AISettingsDao'
 import { TemplateDao } from '../services/db/TemplateDao'
 import { TopicDao } from '../services/db/TopicDao'
 import { VersionDao } from '../services/db/VersionDao'
+import { ArticleExportHelper } from '../utils/ArticleExportHelper'
 import { Logger } from '../utils/Logger'
-import { formatDateTime } from '../utils/DateUtil'
 import { ImageGenerationService, ImageGenerationConfig, GeneratedImage, IMAGE_PROVIDERS, ImageProviderInfo } from '../services/ai/ImageGenerationService'
+import { ContentMetrics } from '../utils/ContentMetrics'
+import { AppStorageKeys, ThemeMode } from '../constants/AppStorageKeys'
 
 @Component
 export struct ArticleEditorPageContent {
   @Consume('navPathStack') navPathStack: NavPathStack
-  @StorageProp('currentUserId') currentUserId: string = ''
+  @StorageProp(AppStorageKeys.CURRENT_USER_ID) currentUserId: string = ''
+  @StorageLink(AppStorageKeys.THEME_MODE) @Watch('onThemeChanged') themeMode: ThemeMode = ThemeMode.System
+  @StorageLink(AppStorageKeys.SYSTEM_COLOR_MODE) @Watch('onThemeChanged') systemColorMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   // 编辑器模式: 'new' | 已有 articleId
   @State articleId: string = ''
@@ -65,23 +77,28 @@ export struct ArticleEditorPageContent {
   @State publishing: boolean = false
   @State saving: boolean = false
   @State generateProgress: number = 0
+  @State followGeneratingTail: boolean = true
 
   // 版本历史
   @State versions: ArticleVersion[] = []
-  @State showVersionSheet: boolean = false
   @State expandedVersionIds: string[] = []
 
   // AI 流请求引用
   private streamRequest: http.HttpRequest | null = null
   private generateProgressTimer: number | null = null
   private activeGenerationId: number = 0
+  private generatingContentScroller: Scroller = new Scroller()
+  private generatingAutoScrollTimer: number | null = null
 
   // 当前活跃面板
   @State activePanel: string = 'ai' // 'ai' | 'publish' | 'version'
 
   // 编辑器模式
-  @State previewMode: boolean = false   // false=edit, true=preview
   @State editorMode: string = 'markdown'  // 'markdown' | 'plain'
+  @State isPreviewOpen: boolean = false
+  @State previewUrl: string = ''
+  @State articleTokensUsed: number = 0
+  @State lastGenerationTokens: number = 0
 
   // 图片生成
   @State showImageDialog: boolean = false
@@ -147,13 +164,13 @@ export struct ArticleEditorPageContent {
   }
 
   private initializeFromParams(): void {
-    const params = this.navPathStack.getParamByName(Routes.ARTICLE_EDITOR) as Record<string, string>[]
+    const params = this.navPathStack.getParamByName(Routes.ARTICLE_EDITOR) as ArticleEditorNavParam[]
     const param = params && params.length > 0 ? params[params.length - 1] : undefined
-    const articleId = param && param['articleId'] ? param['articleId'] : 'new'
-    const sourceType = param && param['sourceType'] ? param['sourceType'] : 'article'
-    const sourceId = param && param['sourceId'] ? param['sourceId'] : ''
-    const initialTitle = param && param['initialTitle'] ? param['initialTitle'] : ''
-    const initialKeywords = param && param['initialKeywords'] ? param['initialKeywords'] : ''
+    const articleId = param ? param.articleId : 'new'
+    const sourceType = param ? param.sourceType : 'article'
+    const sourceId = param ? param.sourceId : ''
+    const initialTitle = param ? param.initialTitle : ''
+    const initialKeywords = param ? param.initialKeywords : ''
 
     this.selectedTopicId = ''
     this.title = ''
@@ -196,6 +213,8 @@ export struct ArticleEditorPageContent {
       this.applyTemplateState(article.template)
       this.siteId = article.siteId
       this.wordpressPostId = article.wordpressPostId
+      this.articleTokensUsed = article.tokensUsed
+      this.lastGenerationTokens = 0
 
       // 加载 WordPress 分类
       if (this.siteId.length > 0) {
@@ -264,8 +283,30 @@ export struct ArticleEditorPageContent {
     }
   }
 
+  private clearGeneratingAutoScrollTimer(): void {
+    if (this.generatingAutoScrollTimer !== null) {
+      clearTimeout(this.generatingAutoScrollTimer)
+      this.generatingAutoScrollTimer = null
+    }
+  }
+
+  private scheduleAutoScrollToBottom(): void {
+    if (!this.generating || !this.followGeneratingTail) return
+    if (this.generatingAutoScrollTimer !== null) return
+    this.generatingAutoScrollTimer = setTimeout(() => {
+      this.generatingAutoScrollTimer = null
+      if (!this.generating || !this.followGeneratingTail) return
+      try {
+        this.generatingContentScroller.scrollEdge(Edge.Bottom)
+      } catch (scrollErr) {
+        Logger.debug('ArticleEditorPage.scheduleAutoScrollToBottom skipped: %{public}s', String(scrollErr))
+      }
+    }, 80)
+  }
+
   private cleanupGenerationState(progress: number): void {
     this.clearGenerateProgressTimer()
+    this.clearGeneratingAutoScrollTimer()
     this.generating = false
     this.generateProgress = progress
     this.streamRequest = null
@@ -282,6 +323,8 @@ export struct ArticleEditorPageContent {
     article.template = this.templateName
     article.status = status.length > 0 ? status : 'draft'
     article.wordpressPostId = this.wordpressPostId
+    article.wordCount = ContentMetrics.countWords(article.content)
+    article.tokensUsed = this.articleTokensUsed
     return article
   }
 
@@ -371,8 +414,8 @@ export struct ArticleEditorPageContent {
     }
 
     UiFeedback.showToast({ message: '更新发布成功' })
-    const currentRefresh = AppStorage.get<number>('articlesNeedRefresh') ?? 0
-    AppStorage.setOrCreate<number>('articlesNeedRefresh', currentRefresh + 1)
+    const currentRefresh = AppStorage.get<number>(AppStorageKeys.ARTICLES_NEED_REFRESH) ?? 0
+    AppStorage.setOrCreate<number>(AppStorageKeys.ARTICLES_NEED_REFRESH, currentRefresh + 1)
     this.navPathStack.pop()
   }
 
@@ -400,8 +443,8 @@ export struct ArticleEditorPageContent {
     }
 
     UiFeedback.showToast({ message: '发布成功' })
-    const currentRefresh2 = AppStorage.get<number>('articlesNeedRefresh') ?? 0
-    AppStorage.setOrCreate<number>('articlesNeedRefresh', currentRefresh2 + 1)
+    const currentRefresh2 = AppStorage.get<number>(AppStorageKeys.ARTICLES_NEED_REFRESH) ?? 0
+    AppStorage.setOrCreate<number>(AppStorageKeys.ARTICLES_NEED_REFRESH, currentRefresh2 + 1)
     this.navPathStack.pop()
   }
 
@@ -419,10 +462,12 @@ export struct ArticleEditorPageContent {
           this.content, this.keywords, this.templateName, this.wordpressPostId, this.articleStatus)
         this.articleId = article.id
         this.isNew = false
-        this.articleStatus = article.status
+        const updated = this.buildArticleRecord(article.status)
+        await ArticleDao.update(updated)
+        this.articleStatus = updated.status
         UiFeedback.showToast({ message: '文章创建成功' })
-        const currentRefresh = AppStorage.get<number>('articlesNeedRefresh') ?? 0
-        AppStorage.setOrCreate<number>('articlesNeedRefresh', currentRefresh + 1)
+        const currentRefresh = AppStorage.get<number>(AppStorageKeys.ARTICLES_NEED_REFRESH) ?? 0
+        AppStorage.setOrCreate<number>(AppStorageKeys.ARTICLES_NEED_REFRESH, currentRefresh + 1)
       } else {
         // 创建版本
         const versionNumber = await VersionDao.getNextVersionNumber(this.articleId)
@@ -434,8 +479,8 @@ export struct ArticleEditorPageContent {
         this.articleStatus = article.status
         await this.loadVersions()
         UiFeedback.showToast({ message: '已保存，已创建版本历史' })
-        const currentRefresh = AppStorage.get<number>('articlesNeedRefresh') ?? 0
-        AppStorage.setOrCreate<number>('articlesNeedRefresh', currentRefresh + 1)
+        const currentRefresh = AppStorage.get<number>(AppStorageKeys.ARTICLES_NEED_REFRESH) ?? 0
+        AppStorage.setOrCreate<number>(AppStorageKeys.ARTICLES_NEED_REFRESH, currentRefresh + 1)
       }
       return true
     } catch (err) {
@@ -488,8 +533,9 @@ export struct ArticleEditorPageContent {
 
     this.generating = true
     this.generateProgress = 0
+    this.followGeneratingTail = true
     this.content = ''
-    this.previewMode = false  // 生成时切换到编辑模式
+    this.isPreviewOpen = false
     this.activeGenerationId += 1
     const generationId = this.activeGenerationId
 
@@ -506,17 +552,41 @@ export struct ArticleEditorPageContent {
     options.apiKey = aiSettings.apiKey
     options.model = aiSettings.model
     options.messages = [systemMsg, userMsg]
+    this.lastGenerationTokens = 0
     options.onUpdate = (content: string) => {
       if (generationId !== this.activeGenerationId) {
         return
       }
       this.content = content
+      this.scheduleAutoScrollToBottom()
+    }
+    options.onUsage = (totalTokens: number) => {
+      if (generationId !== this.activeGenerationId) {
+        return
+      }
+      this.lastGenerationTokens = totalTokens
     }
     options.onComplete = () => {
       if (generationId !== this.activeGenerationId) {
         return
       }
       this.cleanupGenerationState(100)
+      if (this.lastGenerationTokens <= 0) {
+        this.lastGenerationTokens = ContentMetrics.estimateTokens(systemPrompt + '\n' + userMessage) + ContentMetrics.estimateTokens(this.content)
+      }
+      this.articleTokensUsed += this.lastGenerationTokens
+      if (this.selectedAiSettingsId.length > 0) {
+        AISettingsDao.addTokensUsed(this.selectedAiSettingsId, this.lastGenerationTokens).then(() => {
+          const idx = this.aiSettingsList.findIndex((s: AISettingsModel) => s.id === this.selectedAiSettingsId)
+          if (idx >= 0) {
+            const updated = this.aiSettingsList[idx]
+            updated.tokensUsed += this.lastGenerationTokens
+            this.aiSettingsList = [...this.aiSettingsList]
+          }
+        }).catch((err: Error) => {
+          Logger.warn('Add tokens used failed: %{public}s', String(err))
+        })
+      }
       UiFeedback.showToast({ message: '文章生成完成' })
 
       // 标记主题为已使用
@@ -687,117 +757,7 @@ export struct ArticleEditorPageContent {
     this.siteId = version.siteId
     this.wordpressPostId = version.wordpressPostId
     this.articleStatus = version.status.length > 0 ? version.status : 'draft'
-    this.showVersionSheet = false
     UiFeedback.showToast({ message: `已恢复到版本 ${version.versionNumber}` })
-  }
-
-  // 导出文章 - Markdown格式
-  private exportToMarkdown(): string {
-    return `# ${this.title || '无标题'}
-
-**关键词:** ${this.keywords || '无'}
-**模板:** ${this.templateName || '默认'}
-**状态:** ${this.articleStatus || '草稿'}
-
----
-
-${this.content || ''}
-`
-  }
-
-  // 导出文章 - 纯文本格式（去除markdown标记）
-  private exportToPlainText(): string {
-    let text = this.content || ''
-    // 移除标题标记
-    text = text.replace(/^#{1,6}\s+/gm, '')
-    // 移除粗体/斜体标记
-    text = text.replace(/\*\*?|\*\*?/g, '')
-    // 移除链接标记 [text](url) -> text
-    text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-    // 移除图片标记 ![alt](url)
-    text = text.replace(/!\[([^\]]*)\]\([^\)]+\)/g, '')
-    // 移除代码块标记
-    text = text.replace(/```[\s\S]*?```/g, '')
-    text = text.replace(/`([^`]+)`/g, '$1')
-    // 移除水平分割线
-    text = text.replace(/^---+$/gm, '')
-    // 移除引用标记
-    text = text.replace(/^>\s*/gm, '')
-    // 移除列表标记
-    text = text.replace(/^[\*\-\+]\s+/gm, '')
-    text = text.replace(/^\d+\.\s+/gm, '')
-
-    return `${this.title || '无标题'}
-========================================
-
-关键词: ${this.keywords || '无'}
-模板: ${this.templateName || '默认'}
-状态: ${this.articleStatus || '草稿'}
-
-----------------------------------------
-
-${text}
-`
-  }
-
-  // 导出文章 - HTML格式（基础转换）
-  private exportToHtml(): string {
-    let htmlContent = this.content || ''
-    // 转换标题
-    htmlContent = htmlContent.replace(/^######\s+(.+)$/gm, '<h6>$1</h6>')
-    htmlContent = htmlContent.replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>')
-    htmlContent = htmlContent.replace(/^####\s+(.+)$/gm, '<h4>$1</h4>')
-    htmlContent = htmlContent.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
-    htmlContent = htmlContent.replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
-    htmlContent = htmlContent.replace(/^#\s+(.+)$/gm, '<h1>$1</h1>')
-    // 转换粗体
-    htmlContent = htmlContent.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    htmlContent = htmlContent.replace(/__(.+?)__/g, '<strong>$1</strong>')
-    // 转换斜体
-    htmlContent = htmlContent.replace(/\*(.+?)\*/g, '<em>$1</em>')
-    htmlContent = htmlContent.replace(/_(.+?)_/g, '<em>$1</em>')
-    // 转换链接
-    htmlContent = htmlContent.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2">$1</a>')
-    // 转换代码块
-    htmlContent = htmlContent.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    htmlContent = htmlContent.replace(/`([^`]+)`/g, '<code>$1</code>')
-    // 转换段落（简单处理：将连续空行分隔的文本包裹在p标签中）
-    const paragraphs = htmlContent.split(/\n\n+/)
-    htmlContent = paragraphs.map((p: string) => {
-      const trimmed = p.trim()
-      if (trimmed.length === 0) return ''
-      if (trimmed.startsWith('<h') || trimmed.startsWith('<pre')) return trimmed
-      return `<p>${trimmed.replace(/\n/g, '<br>')}</p>`
-    }).join('\n')
-
-    return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${this.title || '无标题'}</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; color: #333; }
-        h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
-        h2, h3, h4, h5, h6 { margin-top: 24px; margin-bottom: 16px; }
-        .meta { color: #666; font-size: 0.9em; margin-bottom: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; }
-        pre { background: #f4f4f4; padding: 16px; overflow-x: auto; border-radius: 4px; }
-        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
-        a { color: #0366d6; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-    </style>
-</head>
-<body>
-    <h1>${this.title || '无标题'}</h1>
-    <div class="meta">
-        <p>关键词: ${this.keywords || '无'} | 模板: ${this.templateName || '默认'} | 状态: ${this.articleStatus || '草稿'}</p>
-    </div>
-    <hr>
-    <div class="content">
-${htmlContent}
-    </div>
-</body>
-</html>`
   }
 
   // 处理导出文章
@@ -809,23 +769,38 @@ ${htmlContent}
 
     let content: string
     let extension: string
-    let mimeType: string
 
     switch (format) {
       case 'markdown':
-        content = this.exportToMarkdown()
+        content = ArticleExportHelper.toMarkdown(
+          this.title,
+          this.keywords,
+          this.templateName,
+          this.articleStatus,
+          this.content
+        )
         extension = 'md'
-        mimeType = 'text/markdown'
         break
       case 'txt':
-        content = this.exportToPlainText()
+        content = ArticleExportHelper.toPlainText(
+          this.title,
+          this.keywords,
+          this.templateName,
+          this.articleStatus,
+          this.content
+        )
         extension = 'txt'
-        mimeType = 'text/plain'
         break
       case 'html':
-        content = this.exportToHtml()
+        content = ArticleExportHelper.toHtml(
+          this.title,
+          this.keywords,
+          this.templateName,
+          this.articleStatus,
+          this.content,
+          this.getEffectiveTheme() === 'dark'
+        )
         extension = 'html'
-        mimeType = 'text/html'
         break
       default:
         return
@@ -891,115 +866,62 @@ ${htmlContent}
 
   // 获取内容长度（字数统计）
   private getContentLength(content: string): number {
-    if (!content || content.length === 0) return 0
-    // 简单统计中文字符和英文单词
-    const chineseChars = content.match(/[\u4e00-\u9fa5]/g) || []
-    const englishWords = content.match(/[a-zA-Z]+/g) || []
-    return chineseChars.length + englishWords.length
+    return ContentMetrics.countWords(content)
   }
 
-  // Markdown 转 HTML（用于预览）
-  private markdownToHtml(md: string): string {
-    if (!md || md.length === 0) return '<p style="color: #999;">暂无内容</p>'
+  private previewWebController: webview.WebviewController = new webview.WebviewController()
+  private readonly previewBaseUrl: string = 'resource://rawfile/preview/preview.html'
 
-    let html: string = md
+  private openPreviewSheet(): void {
+    if (this.editorMode !== 'markdown') return
+    const theme = this.getEffectiveTheme()
+    this.previewUrl = `${this.previewBaseUrl}?t=${Date.now()}&theme=${theme}`
+    this.isPreviewOpen = true
+  }
 
-    // 转义 HTML 特殊字符（代码块内的内容需要保护）
-    const codeBlocks: string[] = []
-    html = html.replace(/```([\s\S]*?)```/g, (match: string) => {
-      codeBlocks.push(match)
-      return `___CODE_BLOCK_${codeBlocks.length - 1}___`
-    })
+  private closePreviewSheet(): void {
+    this.isPreviewOpen = false
+  }
 
-    const inlineCodes: string[] = []
-    html = html.replace(/`([^`]+)`/g, (match: string, code: string) => {
-      inlineCodes.push(code)
-      return `___INLINE_CODE_${inlineCodes.length - 1}___`
-    })
+  private getEffectiveTheme(): string {
+    if (this.themeMode === ThemeMode.Dark) return 'dark'
+    if (this.themeMode === ThemeMode.Light) return 'light'
+    return this.systemColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? 'dark' : 'light'
+  }
 
-    // 转换标题 h1-h6
-    html = html.replace(/^######\s+(.+)$/gm, '<h6 style="margin: 8px 0; font-size: 14px; color: #333;">$1</h6>')
-    html = html.replace(/^#####\s+(.+)$/gm, '<h5 style="margin: 10px 0; font-size: 15px; color: #333;">$1</h5>')
-    html = html.replace(/^####\s+(.+)$/gm, '<h4 style="margin: 12px 0; font-size: 16px; color: #333;">$1</h4>')
-    html = html.replace(/^###\s+(.+)$/gm, '<h3 style="margin: 14px 0; font-size: 18px; color: #333;">$1</h3>')
-    html = html.replace(/^##\s+(.+)$/gm, '<h2 style="margin: 16px 0; font-size: 20px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 8px;">$1</h2>')
-    html = html.replace(/^#\s+(.+)$/gm, '<h1 style="margin: 20px 0; font-size: 24px; color: #333; border-bottom: 2px solid #333; padding-bottom: 10px;">$1</h1>')
+  private onThemeChanged(): void {
+    this.syncPreviewToWeb()
+  }
 
-    // 转换粗体 **text** 或 __text__
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="font-weight: bold;">$1</strong>')
-    html = html.replace(/__(.+?)__/g, '<strong style="font-weight: bold;">$1</strong>')
+  private getPreviewMarkdownArg(markdown: string): string {
+    let json = JSON.stringify(markdown)
+    json = json.replace(/<\/script/gi, '<\\/script')
+    return json
+  }
 
-    // 转换斜体 *text* 或 _text_ (但排除已转换的 **)
-    html = html.replace(/\*(.+?)\*/g, '<em style="font-style: italic;">$1</em>')
-    html = html.replace(/_(.+?)_/g, '<em style="font-style: italic;">$1</em>')
+  private syncPreviewToWeb(): void {
+    if (!this.isPreviewOpen) return
+    const arg = this.getPreviewMarkdownArg(this.content)
+    const theme = this.getEffectiveTheme()
+    const themeScript = `window.__setTheme && window.__setTheme('${theme}');`
+    const script = `window.__setMarkdown && window.__setMarkdown(${arg});`
+    try {
+      this.previewWebController.runJavaScript(themeScript)
+      this.previewWebController.runJavaScript(script)
+    } catch (syncErr) {
+      Logger.debug('ArticleEditorPage.syncPreviewToWeb skipped: %{public}s', String(syncErr))
+    }
+  }
 
-    // 转换删除线 ~~text~~
-    html = html.replace(/~~(.+?)~~/g, '<del style="text-decoration: line-through;">$1</del>')
-
-    // 转换链接 [text](url)
-    html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" style="color: #007DFF; text-decoration: none;">$1</a>')
-
-    // 转换图片 ![alt](url)
-    html = html.replace(/!\[([^\]]*)\]\(([^\)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0;">')
-
-    // 转换无序列表 - item 或 * item 或 + item
-    html = html.replace(/^[\*\-\+]\s+(.+)$/gm, '<li style="margin: 4px 0; margin-left: 20px;">$1</li>')
-    // 包裹 ul 标签
-    html = html.replace(/(<li[^>]*>[\s\S]*?<\/li>\n?)+/g, '<ul style="margin: 8px 0; padding-left: 20px;">$&</ul>')
-    // 移除嵌套的 ul
-    html = html.replace(/<\/ul>\s*<ul[^>]*>/g, '')
-
-    // 转换有序列表 1. item
-    html = html.replace(/^\d+\.\s+(.+)$/gm, '<li style="margin: 4px 0; margin-left: 20px;">$1</li>')
-    html = html.replace(/(<li[^>]*>[\s\S]*?<\/li>\n?)+/g, (match: string) => {
-      if (match.includes('<ul')) return match
-      return `<ol style="margin: 8px 0; padding-left: 20px;">${match}</ol>`
-    })
-
-    // 转换引用 > text
-    html = html.replace(/^>\s*(.+)$/gm, '<blockquote style="margin: 12px 0; padding: 8px 16px; border-left: 4px solid #007DFF; background: #f5f5f5; color: #666;">$1</blockquote>')
-
-    // 转换水平分割线 --- 或 *** 或 ___
-    html = html.replace(/^(---|___|\*\*\*)$/gm, '<hr style="border: none; border-top: 1px solid #e4e5e7; margin: 16px 0;">')
-
-    // 恢复内联代码
-    inlineCodes.forEach((code: string, index: number) => {
-      html = html.replace(
-        `___INLINE_CODE_${index}___`,
-        `<code style="background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 0.9em;">${code}</code>`
-      )
-    })
-
-    // 恢复代码块
-    codeBlocks.forEach((block: string, index: number) => {
-      const code = block.replace(/```/g, '').trim()
-      html = html.replace(
-        `___CODE_BLOCK_${index}___`,
-        `<pre style="background: #f8f8f8; padding: 16px; overflow-x: auto; border-radius: 8px; margin: 12px 0;"><code style="font-family: monospace; font-size: 13px; line-height: 1.5;">${code}</code></pre>`
-      )
-    })
-
-    // 转换段落（简单处理：将连续空行分隔的文本包裹在p标签中）
-    const paragraphs: string[] = html.split(/\n\n+/)
-    html = paragraphs.map((p: string) => {
-      const trimmed: string = p.trim()
-      if (trimmed.length === 0) return ''
-      // 如果已经是块级元素，不再包裹
-      if (trimmed.startsWith('<h') ||
-          trimmed.startsWith('<pre') ||
-          trimmed.startsWith('<ul') ||
-          trimmed.startsWith('<ol') ||
-          trimmed.startsWith('<blockquote') ||
-          trimmed.startsWith('<hr') ||
-          trimmed.startsWith('<li')) {
-        return trimmed
+  @Builder
+  private buildPreviewSheet(): void {
+    ArticlePreviewSheetComponent({
+      previewUrl: this.previewUrl,
+      controller: this.previewWebController,
+      onPageReady: () => {
+        this.syncPreviewToWeb()
       }
-      // 行内转换换行符为 <br>
-      return `<p style="margin: 8px 0; line-height: 1.6;">${trimmed.replace(/\n/g, '<br>')}</p>`
-    }).join('\n')
-
-    // 包装在容器中
-    return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; line-height: 1.6;">${html}</div>`
+    })
   }
 
   // 插入 Markdown 格式
@@ -1025,18 +947,56 @@ ${htmlContent}
             this.ContentSection()
 
             // 功能面板切换
-            this.PanelTabs()
+            ArticleEditorPanelTabsComponent({
+              activePanel: this.activePanel,
+              versionsCount: this.versions.length,
+              onChange: (panelKey: string) => {
+                this.activePanel = panelKey
+              }
+            })
 
             // 站点快速选择（始终显示）
-            this.SiteQuickSelect()
+            ArticleSiteQuickSelectComponent({
+              sites: this.sites,
+              selectedSiteId: this.siteId,
+              onSelectSite: (site: WordPressSite) => {
+                this.siteId = site.id
+                this.selectedCategories = []
+                this.loadCategories(this.siteId)
+              }
+            })
 
             // 当前面板内容
             if (this.activePanel === 'ai') {
               this.AIPanel()
             } else if (this.activePanel === 'publish') {
-              this.PublishPanel()
+              ArticlePublishPanelComponent({
+                categories: this.wpCategories,
+                selectedCategories: this.selectedCategories,
+                postSlug: $postSlug,
+                generatingSlug: this.generatingSlug,
+                wordpressPostId: this.wordpressPostId,
+                onToggleCategory: (categoryId: number) => {
+                  this.toggleCategory(categoryId)
+                },
+                onGenerateSlug: () => {
+                  this.handleGenerateSlug()
+                }
+              })
             } else if (this.activePanel === 'version') {
-              this.VersionPanel()
+              ArticleVersionPanelComponent({
+                versions: this.versions,
+                expandedVersionIds: this.expandedVersionIds,
+                onToggleExpand: (versionId: string) => {
+                  this.toggleVersionExpand(versionId)
+                },
+                onDelete: (version: ArticleVersion) => {
+                  this.handleDeleteVersion(version)
+                },
+                onRestore: (version: ArticleVersion) => {
+                  this.handleRestoreVersion(version)
+                }
+              })
             }
 
             // 图片生成面板（显示在 AI 面板下方）
@@ -1052,7 +1012,13 @@ ${htmlContent}
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(Colors.BG_SECONDARY)
+      .backgroundColor(ResourceColors.BG_SECONDARY)
+      .bindSheet($$this.isPreviewOpen, this.buildPreviewSheet(), {
+        height: SheetSize.LARGE,
+        onDisappear: () => {
+          this.previewUrl = ''
+        }
+      })
     }
     .hideTitleBar(true)
   }
@@ -1064,7 +1030,7 @@ ${htmlContent}
       Text(this.isNew ? '新建文章' : '编辑文章')
         .fontSize(Typography.SUBTITLE)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
         .layoutWeight(1)
         .textAlign(TextAlign.Center)
 
@@ -1073,7 +1039,7 @@ ${htmlContent}
         Button('导出')
           .type(ButtonType.Normal)
           .fontSize(Typography.BODY)
-          .fontColor(Colors.PRIMARY)
+          .fontColor(ResourceColors.PRIMARY)
           .backgroundColor(Color.Transparent)
           .enabled(this.title.length > 0 || this.content.length > 0)
           .bindMenu([
@@ -1086,7 +1052,7 @@ ${htmlContent}
         Button(this.saving ? '保存中...' : '保存')
           .type(ButtonType.Normal)
           .fontSize(Typography.BODY)
-          .fontColor(Colors.PRIMARY)
+          .fontColor(ResourceColors.PRIMARY)
           .backgroundColor(Color.Transparent)
           .enabled(!this.saving && !this.generating)
           .onClick(() => {
@@ -1097,8 +1063,8 @@ ${htmlContent}
         Button(this.publishing ? '发布中...' : (this.wordpressPostId.length > 0 ? '更新' : '发布'))
           .type(ButtonType.Normal)
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_ON_PRIMARY)
-          .backgroundColor(this.publishing ? Colors.PRIMARY_DISABLED : Colors.PRIMARY)
+          .fontColor(ResourceColors.TEXT_ON_PRIMARY)
+          .backgroundColor(this.publishing ? ResourceColors.PRIMARY_DISABLED : ResourceColors.PRIMARY)
           .borderRadius(Radius.SM)
           .height(36)
           .padding({ left: Spacing.MD, right: Spacing.MD })
@@ -1111,8 +1077,8 @@ ${htmlContent}
     .width('100%')
     .height(56)
     .padding({ left: Spacing.SM, right: Spacing.BASE })
-    .backgroundColor(Colors.BG_PRIMARY)
-    .border({ width: { bottom: 0.5 }, color: Colors.DIVIDER })
+    .backgroundColor(ResourceColors.BG_PRIMARY)
+    .border({ width: { bottom: 0.5 }, color: ResourceColors.DIVIDER })
   }
 
   // 标题输入
@@ -1120,8 +1086,8 @@ ${htmlContent}
   TitleSection() {
     TextInput({ text: this.title, placeholder: '输入文章标题...' })
       .fontSize(Typography.TITLE)
-      .fontColor(Colors.TEXT_PRIMARY)
-      .placeholderColor(Colors.TEXT_HINT)
+      .fontColor(ResourceColors.TEXT_PRIMARY)
+      .placeholderColor(ResourceColors.TEXT_HINT)
       .fontWeight(FontWeight.Bold)
       .backgroundColor(Color.Transparent)
       .padding({ top: Spacing.BASE, bottom: Spacing.SM })
@@ -1136,14 +1102,14 @@ ${htmlContent}
     Column({ space: Spacing.XS }) {
       Text('关键词')
         .fontSize(Typography.CAPTION)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
 
       TextInput({ text: this.keywords, placeholder: '输入关键词，用逗号分隔' })
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_PRIMARY)
-        .placeholderColor(Colors.TEXT_HINT)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
+        .placeholderColor(ResourceColors.TEXT_HINT)
         .height(ComponentSize.INPUT_HEIGHT)
-        .backgroundColor(Colors.BG_PRIMARY)
+        .backgroundColor(ResourceColors.BG_PRIMARY)
         .borderRadius(Radius.SM)
         .onChange((value: string) => {
           this.keywords = value
@@ -1154,144 +1120,6 @@ ${htmlContent}
     .padding({ top: Spacing.SM })
   }
 
-  // 格式化工具栏
-  @Builder
-  FormatToolbar() {
-    Scroll() {
-      Row({ space: Spacing.XS }) {
-        // 粗体
-        Text('B')
-          .fontSize(Typography.BODY)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(32)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('**', '**', '粗体文本') })
-
-        // 斜体
-        Text('I')
-          .fontSize(Typography.BODY)
-          .fontStyle(FontStyle.Italic)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(32)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('*', '*', '斜体文本') })
-
-        // H1
-        Text('H1')
-          .fontSize(Typography.CAPTION)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(36)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('\n# ', '\n', '标题\n') })
-
-        // H2
-        Text('H2')
-          .fontSize(Typography.CAPTION)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(36)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('\n## ', '\n', '小标题\n') })
-
-        // H3
-        Text('H3')
-          .fontSize(Typography.CAPTION)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(36)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('\n### ', '\n', '子标题\n') })
-
-        // 无序列表
-        Text('UL')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(32)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('\n- ', '\n', '列表项\n') })
-
-        // 有序列表
-        Text('OL')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(32)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('\n1. ', '\n', '列表项\n') })
-
-        // 代码
-        Text('` `')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(40)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('`', '`', '代码') })
-
-        // 代码块
-        Text('{}')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(32)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('\n```\n', '\n```\n', '代码块\n') })
-
-        // 链接
-        Text('Link')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(44)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('[', '](URL)', '链接文本') })
-
-        // 图片
-        Text('Img')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .width(40)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .backgroundColor(Colors.BG_SECONDARY)
-          .borderRadius(Radius.SM)
-          .onClick(() => { this.insertMarkdown('![', '](URL)', '图片描述') })
-      }
-      .padding({ left: Spacing.XS, right: Spacing.XS })
-    }
-    .scrollable(ScrollDirection.Horizontal)
-    .width('100%')
-    .scrollBar(BarState.Off)
-  }
-
   // 内容编辑区
   @Builder
   ContentSection() {
@@ -1300,7 +1128,7 @@ ${htmlContent}
       Row() {
         Text('内容')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
 
         Blank()
 
@@ -1308,7 +1136,7 @@ ${htmlContent}
         Row({ space: Spacing.XS }) {
           Text('Markdown')
             .fontSize(Typography.CAPTION)
-            .fontColor(this.editorMode === 'markdown' ? Colors.PRIMARY : Colors.TEXT_SECONDARY)
+            .fontColor(this.editorMode === 'markdown' ? ResourceColors.PRIMARY : ResourceColors.TEXT_SECONDARY)
             .fontWeight(this.editorMode === 'markdown' ? FontWeight.Medium : FontWeight.Normal)
             .padding({ left: Spacing.SM, right: Spacing.SM, top: Spacing.XS, bottom: Spacing.XS })
             .backgroundColor(this.editorMode === 'markdown' ? 'rgba(0,125,255,0.1)' : Color.Transparent)
@@ -1317,14 +1145,13 @@ ${htmlContent}
 
           Text('纯文本')
             .fontSize(Typography.CAPTION)
-            .fontColor(this.editorMode === 'plain' ? Colors.PRIMARY : Colors.TEXT_SECONDARY)
+            .fontColor(this.editorMode === 'plain' ? ResourceColors.PRIMARY : ResourceColors.TEXT_SECONDARY)
             .fontWeight(this.editorMode === 'plain' ? FontWeight.Medium : FontWeight.Normal)
             .padding({ left: Spacing.SM, right: Spacing.SM, top: Spacing.XS, bottom: Spacing.XS })
             .backgroundColor(this.editorMode === 'plain' ? 'rgba(0,125,255,0.1)' : Color.Transparent)
             .borderRadius(Radius.SM)
             .onClick(() => {
               this.editorMode = 'plain'
-              this.previewMode = false
             })
         }
 
@@ -1333,30 +1160,21 @@ ${htmlContent}
           .vertical(true)
           .height(20)
           .strokeWidth(1)
-          .color(Colors.DIVIDER)
+          .color(ResourceColors.DIVIDER)
           .margin({ left: Spacing.SM, right: Spacing.SM })
 
-        // 编辑/预览切换（仅 Markdown 模式显示）
+        // 预览按钮（仅 Markdown 模式显示）
         if (this.editorMode === 'markdown') {
-          Row({ space: Spacing.XS }) {
-            Text('编辑')
-              .fontSize(Typography.CAPTION)
-              .fontColor(!this.previewMode ? Colors.PRIMARY : Colors.TEXT_SECONDARY)
-              .fontWeight(!this.previewMode ? FontWeight.Medium : FontWeight.Normal)
-              .padding({ left: Spacing.SM, right: Spacing.SM, top: Spacing.XS, bottom: Spacing.XS })
-              .backgroundColor(!this.previewMode ? 'rgba(0,125,255,0.1)' : Color.Transparent)
-              .borderRadius(Radius.SM)
-              .onClick(() => { this.previewMode = false })
-
-            Text('预览')
-              .fontSize(Typography.CAPTION)
-              .fontColor(this.previewMode ? Colors.PRIMARY : Colors.TEXT_SECONDARY)
-              .fontWeight(this.previewMode ? FontWeight.Medium : FontWeight.Normal)
-              .padding({ left: Spacing.SM, right: Spacing.SM, top: Spacing.XS, bottom: Spacing.XS })
-              .backgroundColor(this.previewMode ? 'rgba(0,125,255,0.1)' : Color.Transparent)
-              .borderRadius(Radius.SM)
-              .onClick(() => { this.previewMode = true })
-          }
+          Text('预览')
+            .fontSize(Typography.CAPTION)
+            .fontColor(ResourceColors.PRIMARY)
+            .fontWeight(FontWeight.Medium)
+            .padding({ left: Spacing.SM, right: Spacing.SM, top: Spacing.XS, bottom: Spacing.XS })
+            .backgroundColor('rgba(0,125,255,0.1)')
+            .borderRadius(Radius.SM)
+            .onClick(() => {
+              this.openPreviewSheet()
+            })
         }
 
         // 生成状态指示
@@ -1365,12 +1183,26 @@ ${htmlContent}
             LoadingProgress()
               .width(14)
               .height(14)
-              .color(Colors.PRIMARY)
+              .color(ResourceColors.PRIMARY)
             Text(`${Math.floor(this.generateProgress)}%`)
               .fontSize(Typography.CAPTION)
-              .fontColor(Colors.PRIMARY)
+              .fontColor(ResourceColors.PRIMARY)
           }
           .margin({ left: Spacing.SM })
+
+          if (!this.followGeneratingTail) {
+            Text('跟随底部')
+              .fontSize(Typography.CAPTION)
+              .fontColor(ResourceColors.PRIMARY)
+              .padding({ left: Spacing.SM, right: Spacing.SM, top: Spacing.XS, bottom: Spacing.XS })
+              .backgroundColor('rgba(0,125,255,0.1)')
+              .borderRadius(Radius.SM)
+              .margin({ left: Spacing.SM })
+              .onClick(() => {
+                this.followGeneratingTail = true
+                this.scheduleAutoScrollToBottom()
+              })
+          }
         }
       }
       .width('100%')
@@ -1378,115 +1210,74 @@ ${htmlContent}
       .alignItems(VerticalAlign.Center)
 
       // Markdown 工具栏（仅在 Markdown 编辑模式下显示）
-      if (this.editorMode === 'markdown' && !this.previewMode) {
-        this.FormatToolbar()
+      if (this.editorMode === 'markdown') {
+        ArticleEditorFormatToolbarComponent({
+          onInsertMarkdown: (prefix: string, suffix: string, placeholder: string) => {
+            this.insertMarkdown(prefix, suffix, placeholder)
+          }
+        })
       }
 
-      // 内容编辑区或预览区
-      if (this.editorMode === 'markdown' && this.previewMode) {
-        // 预览模式
-        Scroll() {
-          RichText(this.markdownToHtml(this.content))
+      if (this.generating) {
+        Scroll(this.generatingContentScroller) {
+          Text(this.content.length > 0 ? this.content : '正在生成内容...')
+            .fontSize(Typography.BODY)
+            .fontColor(this.content.length > 0 ? ResourceColors.TEXT_PRIMARY : ResourceColors.TEXT_HINT)
             .width('100%')
-            .padding(Spacing.MD)
         }
         .width('100%')
         .height(300)
-        .backgroundColor(Colors.BG_PRIMARY)
+        .backgroundColor(ResourceColors.BG_PRIMARY)
         .borderRadius(Radius.SM)
+        .padding(Spacing.MD)
+        .scrollBar(BarState.Auto)
+        .onWillScroll((_xOffset: number, _yOffset: number, _scrollState: ScrollState, scrollSource: ScrollSource) => {
+          if (scrollSource === ScrollSource.DRAG
+            || scrollSource === ScrollSource.OTHER_USER_INPUT
+            || scrollSource === ScrollSource.SCROLL_BAR
+            || scrollSource === ScrollSource.SCROLL_BAR_FLING) {
+            this.followGeneratingTail = false
+          }
+        })
+        .onAppear(() => {
+          this.scheduleAutoScrollToBottom()
+        })
       } else {
-        // 编辑模式（Markdown 或纯文本）
         TextArea({ text: this.content, placeholder: this.editorMode === 'markdown' ? '输入 Markdown 内容...' : '输入文章内容...' })
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .width('100%')
           .height(300)
-          .backgroundColor(Colors.BG_PRIMARY)
+          .backgroundColor(ResourceColors.BG_PRIMARY)
           .borderRadius(Radius.SM)
           .padding(Spacing.MD)
           .onChange((value: string) => {
             this.content = value
           })
       }
+
+      Row({ space: Spacing.MD }) {
+        Text(`字数：${this.getContentLength(this.content)}`)
+          .fontSize(Typography.CAPTION)
+          .fontColor(ResourceColors.TEXT_HINT)
+        if (this.lastGenerationTokens > 0) {
+          Text(`本次 Token：${this.lastGenerationTokens}`)
+            .fontSize(Typography.CAPTION)
+            .fontColor(ResourceColors.TEXT_HINT)
+        }
+        if (this.articleTokensUsed > 0) {
+          Text(`累计 Token：${this.articleTokensUsed}`)
+            .fontSize(Typography.CAPTION)
+            .fontColor(ResourceColors.TEXT_HINT)
+        }
+        Blank()
+      }
+      .width('100%')
+      .padding({ top: 2 })
     }
     .width('100%')
     .padding({ top: Spacing.BASE })
-  }
-
-  // 面板切换标签
-  @Builder
-  PanelTabs() {
-    Row({ space: 0 }) {
-      this.PanelTab('AI 生成', 'ai')
-      this.PanelTab('发布设置', 'publish')
-      this.PanelTab(`版本历史${this.versions.length > 0 ? ` (${this.versions.length})` : ''}`, 'version')
-    }
-    .width('100%')
-    .padding({ top: Spacing.LG })
-    .justifyContent(FlexAlign.Start)
-  }
-
-  @Builder
-  PanelTab(label: string, panelKey: string) {
-    Column() {
-      Text(label)
-        .fontSize(Typography.BODY)
-        .fontWeight(this.activePanel === panelKey ? FontWeight.Bold : FontWeight.Normal)
-        .fontColor(this.activePanel === panelKey ? Colors.PRIMARY : Colors.TEXT_SECONDARY)
-        .padding({ left: Spacing.BASE, right: Spacing.BASE, top: Spacing.SM, bottom: Spacing.SM })
-
-      Divider()
-        .width(this.activePanel === panelKey ? '100%' : '0%')
-        .strokeWidth(2)
-        .color(Colors.PRIMARY)
-        .animation({ duration: AnimDuration.FAST })
-    }
-    .onClick(() => {
-      this.activePanel = panelKey
-    })
-  }
-
-  // 站点快速选择（始终显示在面板区域顶部）
-  @Builder
-  SiteQuickSelect() {
-    Row({ space: Spacing.SM }) {
-      Text('发布站点')
-        .fontSize(Typography.CAPTION)
-        .fontColor(Colors.TEXT_SECONDARY)
-        .flexShrink(0)
-
-      if (this.sites.length > 0) {
-        Select(this.sites.map((s: WordPressSite) => {
-          const option: SelectOption = { value: s.siteName }
-          return option
-        }))
-          .selected(this.sites.findIndex((s: WordPressSite) => s.id === this.siteId))
-          .value(this.getSelectedSiteName())
-          .font({ size: Typography.BODY })
-          .fontColor(Colors.TEXT_PRIMARY)
-          .selectedOptionFont({ size: Typography.BODY })
-          .selectedOptionFontColor(Colors.PRIMARY)
-          .optionFont({ size: Typography.BODY })
-          .optionFontColor(Colors.TEXT_PRIMARY)
-          .onSelect((index: number) => {
-            if (index >= 0 && index < this.sites.length) {
-              this.siteId = this.sites[index].id
-              this.selectedCategories = []
-              this.loadCategories(this.siteId)
-            }
-          })
-          .layoutWeight(1)
-          .height(36)
-      } else {
-        Text('暂无站点')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_HINT)
-      }
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-    .padding({ top: Spacing.SM, bottom: Spacing.SM })
   }
 
   // AI 生成面板
@@ -1498,7 +1289,7 @@ ${htmlContent}
         Column({ space: Spacing.XS }) {
           Text('AI 配置')
             .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_SECONDARY)
+            .fontColor(ResourceColors.TEXT_SECONDARY)
 
           Select(this.aiSettingsList.map((s: AISettingsModel) => {
             const option: SelectOption = { value: s.name }
@@ -1513,7 +1304,7 @@ ${htmlContent}
             })
             .width('100%')
             .height(ComponentSize.INPUT_HEIGHT)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .selectedOptionFont({ size: Typography.BODY, weight: FontWeight.Normal })
             .optionFont({ size: Typography.BODY, weight: FontWeight.Normal })
         }
@@ -1526,7 +1317,7 @@ ${htmlContent}
         Column({ space: Spacing.XS }) {
           Text('文章模板')
             .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_SECONDARY)
+            .fontColor(ResourceColors.TEXT_SECONDARY)
 
           Select(this.templates.map((t: ArticleTemplate) => {
             const option: SelectOption = { value: t.name }
@@ -1542,7 +1333,7 @@ ${htmlContent}
             })
             .width('100%')
             .height(ComponentSize.INPUT_HEIGHT)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .selectedOptionFont({ size: Typography.BODY, weight: FontWeight.Normal })
             .optionFont({ size: Typography.BODY, weight: FontWeight.Normal })
         }
@@ -1555,7 +1346,7 @@ ${htmlContent}
         Column({ space: Spacing.XS }) {
           Text('可用主题')
             .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_SECONDARY)
+            .fontColor(ResourceColors.TEXT_SECONDARY)
 
           Select(this.topics.map((t: Topic) => {
             const option: SelectOption = { value: t.title }
@@ -1570,7 +1361,7 @@ ${htmlContent}
             })
             .width('100%')
             .height(ComponentSize.INPUT_HEIGHT)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .selectedOptionFont({ size: Typography.BODY, weight: FontWeight.Normal })
             .optionFont({ size: Typography.BODY, weight: FontWeight.Normal })
         }
@@ -1583,17 +1374,17 @@ ${htmlContent}
         Column({ space: Spacing.SM }) {
           Progress({ value: this.generateProgress, total: 100, type: ProgressType.Linear })
             .width('100%')
-            .color(Colors.PRIMARY)
+            .color(ResourceColors.PRIMARY)
 
           Button('停止生成')
             .type(ButtonType.Normal)
             .width('100%')
             .height(ComponentSize.BUTTON_HEIGHT)
             .fontSize(Typography.BODY_LARGE)
-            .fontColor(Colors.ERROR)
+            .fontColor(ResourceColors.ERROR)
             .backgroundColor(Color.Transparent)
             .borderWidth(1)
-            .borderColor(Colors.ERROR)
+            .borderColor(ResourceColors.ERROR)
             .borderRadius(Radius.SM)
             .onClick(() => {
               this.handleStopGenerate()
@@ -1606,8 +1397,8 @@ ${htmlContent}
           .width('100%')
           .height(ComponentSize.BUTTON_HEIGHT)
           .fontSize(Typography.BODY_LARGE)
-          .fontColor(Colors.TEXT_ON_PRIMARY)
-          .backgroundColor(Colors.PRIMARY)
+          .fontColor(ResourceColors.TEXT_ON_PRIMARY)
+          .backgroundColor(ResourceColors.PRIMARY)
           .borderRadius(Radius.SM)
           .enabled(this.keywords.length > 0 && this.aiSettingsList.length > 0)
           .onClick(() => {
@@ -1621,17 +1412,17 @@ ${htmlContent}
         .width('100%')
         .height(ComponentSize.BUTTON_HEIGHT)
         .fontSize(Typography.BODY_LARGE)
-        .fontColor(Colors.PRIMARY)
+        .fontColor(ResourceColors.PRIMARY)
         .backgroundColor(Color.Transparent)
         .borderWidth(1)
-        .borderColor(Colors.PRIMARY)
+        .borderColor(ResourceColors.PRIMARY)
         .borderRadius(Radius.SM)
         .enabled(!this.generatingImage && !this.generating)
         .onClick(() => { this.handleOpenImageDialog() })
     }
     .width('100%')
     .padding({ top: Spacing.BASE })
-    .backgroundColor(Colors.BG_PRIMARY)
+    .backgroundColor(ResourceColors.BG_PRIMARY)
     .borderRadius(Radius.MD)
     .padding(Spacing.BASE)
     .margin({ top: Spacing.MD })
@@ -1646,20 +1437,21 @@ ${htmlContent}
         Text('生成配图')
           .fontSize(Typography.SUBTITLE)
           .fontWeight(FontWeight.Medium)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
 
         Blank()
 
-        Button('X')
-          .type(ButtonType.Normal)
-          .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_SECONDARY)
-          .backgroundColor(Color.Transparent)
-          .width(36)
-          .height(36)
-          .onClick(() => {
-            this.showImageDialog = false
-          })
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(ComponentSize.ICON_MD)
+            .fontColor([ResourceColors.TEXT_SECONDARY])
+        }
+        .width(36)
+        .height(36)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.showImageDialog = false
+        })
       }
       .width('100%')
 
@@ -1667,15 +1459,15 @@ ${htmlContent}
       Column({ space: Spacing.XS }) {
         Text('图片描述')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
 
         TextArea({ text: this.imagePrompt, placeholder: '输入图片描述...' })
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .width('100%')
           .height(80)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .borderRadius(Radius.SM)
           .padding(Spacing.MD)
           .onChange((value: string) => {
@@ -1689,7 +1481,7 @@ ${htmlContent}
       Column({ space: Spacing.XS }) {
         Text('服务提供商')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
 
         Select(IMAGE_PROVIDERS.map((p: ImageProviderInfo) => {
           const option: SelectOption = { value: p.label }
@@ -1708,7 +1500,7 @@ ${htmlContent}
           })
           .width('100%')
           .height(ComponentSize.INPUT_HEIGHT)
-          .fontColor(Colors.TEXT_PRIMARY)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
@@ -1717,15 +1509,15 @@ ${htmlContent}
       Column({ space: Spacing.XS }) {
         Text('API Key')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
 
         TextInput({ text: this.imageApiKey, placeholder: '输入 API Key' })
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .width('100%')
           .height(ComponentSize.INPUT_HEIGHT)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .borderRadius(Radius.SM)
           .type(InputType.Password)
           .onChange((value: string) => {
@@ -1739,15 +1531,15 @@ ${htmlContent}
       Column({ space: Spacing.XS }) {
         Text('API 端点（可选）')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
 
         TextInput({ text: this.imageEndpoint, placeholder: '使用默认端点' })
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .width('100%')
           .height(ComponentSize.INPUT_HEIGHT)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .borderRadius(Radius.SM)
           .onChange((value: string) => {
             this.imageEndpoint = value
@@ -1760,15 +1552,15 @@ ${htmlContent}
       Column({ space: Spacing.XS }) {
         Text('模型（可选）')
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
 
         TextInput({ text: this.imageModel, placeholder: '使用默认模型' })
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_PRIMARY)
-          .placeholderColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_PRIMARY)
+          .placeholderColor(ResourceColors.TEXT_HINT)
           .width('100%')
           .height(ComponentSize.INPUT_HEIGHT)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .borderRadius(Radius.SM)
           .onChange((value: string) => {
             this.imageModel = value
@@ -1781,7 +1573,7 @@ ${htmlContent}
       if (this.imageStatus.length > 0) {
         Text(this.imageStatus)
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
           .width('100%')
       }
 
@@ -1790,8 +1582,8 @@ ${htmlContent}
         Button('取消')
           .type(ButtonType.Normal)
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_SECONDARY)
-          .backgroundColor(Colors.BG_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
+          .backgroundColor(ResourceColors.BG_SECONDARY)
           .borderRadius(Radius.SM)
           .layoutWeight(1)
           .height(ComponentSize.BUTTON_HEIGHT)
@@ -1803,8 +1595,8 @@ ${htmlContent}
           Button('生成中...')
             .type(ButtonType.Normal)
             .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_ON_PRIMARY)
-            .backgroundColor(Colors.PRIMARY_DISABLED)
+            .fontColor(ResourceColors.TEXT_ON_PRIMARY)
+            .backgroundColor(ResourceColors.PRIMARY_DISABLED)
             .borderRadius(Radius.SM)
             .layoutWeight(1)
             .height(ComponentSize.BUTTON_HEIGHT)
@@ -1813,8 +1605,8 @@ ${htmlContent}
           Button('生成')
             .type(ButtonType.Normal)
             .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_ON_PRIMARY)
-            .backgroundColor(Colors.PRIMARY)
+            .fontColor(ResourceColors.TEXT_ON_PRIMARY)
+            .backgroundColor(ResourceColors.PRIMARY)
             .borderRadius(Radius.SM)
             .layoutWeight(1)
             .height(ComponentSize.BUTTON_HEIGHT)
@@ -1826,236 +1618,10 @@ ${htmlContent}
       .width('100%')
     }
     .width('100%')
-    .backgroundColor(Colors.BG_PRIMARY)
+    .backgroundColor(ResourceColors.BG_PRIMARY)
     .borderRadius(Radius.MD)
     .padding(Spacing.BASE)
     .margin({ top: Spacing.MD })
-  }
-
-  // 发布面板
-  @Builder
-  PublishPanel() {
-    Column({ space: Spacing.MD }) {
-      // WordPress 分类
-      if (this.wpCategories.length > 0) {
-        Column({ space: Spacing.XS }) {
-          Text('文章分类')
-            .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_SECONDARY)
-
-          Flex({ wrap: FlexWrap.Wrap }) {
-            ForEach(this.wpCategories, (cat: WordPressCategory) => {
-              Button(cat.name)
-                .type(ButtonType.Normal)
-                .fontSize(Typography.CAPTION)
-                .fontColor(this.selectedCategories.includes(cat.id) ? Colors.TEXT_ON_PRIMARY : Colors.TEXT_PRIMARY)
-                .backgroundColor(this.selectedCategories.includes(cat.id) ? Colors.PRIMARY : Color.Transparent)
-                .borderWidth(1)
-                .borderColor(this.selectedCategories.includes(cat.id) ? Colors.PRIMARY : Colors.BORDER)
-                .borderRadius(Radius.FULL)
-                .height(32)
-                .padding({ left: Spacing.MD, right: Spacing.MD })
-                .margin({ right: Spacing.SM, bottom: Spacing.SM })
-                .onClick(() => {
-                  this.toggleCategory(cat.id)
-                })
-            }, (cat: WordPressCategory) => String(cat.id))
-          }
-          .width('100%')
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-      }
-
-      // Slug 输入
-      Column({ space: Spacing.XS }) {
-        Text('文章别名 (Slug)')
-          .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
-
-        Row({ space: Spacing.SM }) {
-          TextInput({ text: this.postSlug, placeholder: '自动生成或手动输入' })
-            .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_PRIMARY)
-            .placeholderColor(Colors.TEXT_HINT)
-            .height(ComponentSize.INPUT_HEIGHT)
-            .layoutWeight(1)
-            .backgroundColor(Colors.BG_SECONDARY)
-            .borderRadius(Radius.SM)
-            .onChange((value: string) => {
-              this.postSlug = value
-            })
-
-          Button(this.generatingSlug ? '...' : 'AI')
-            .type(ButtonType.Normal)
-            .fontSize(Typography.BODY)
-            .fontColor(Colors.PRIMARY)
-            .backgroundColor(Color.Transparent)
-            .borderWidth(1)
-            .borderColor(Colors.PRIMARY)
-            .borderRadius(Radius.SM)
-            .height(ComponentSize.INPUT_HEIGHT)
-            .width(56)
-            .enabled(!this.generatingSlug)
-            .onClick(() => {
-              this.handleGenerateSlug()
-            })
-        }
-        .width('100%')
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-
-      // 状态指示
-      if (this.wordpressPostId.length > 0) {
-        Row({ space: Spacing.SM }) {
-          Circle({ width: 8, height: 8 })
-            .fill(Colors.SUCCESS)
-          Text(`已发布 · Post ID: ${this.wordpressPostId}`)
-            .fontSize(Typography.CAPTION)
-            .fontColor(Colors.SUCCESS)
-        }
-        .width('100%')
-      }
-    }
-    .width('100%')
-    .backgroundColor(Colors.BG_PRIMARY)
-    .borderRadius(Radius.MD)
-    .padding(Spacing.BASE)
-    .margin({ top: Spacing.MD })
-  }
-
-  // 版本历史面板
-  @Builder
-  VersionPanel() {
-    Column({ space: Spacing.MD }) {
-      if (this.versions.length === 0) {
-        Column({ space: Spacing.SM }) {
-          Text('暂无版本历史')
-            .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_HINT)
-          Text('保存文章后会自动创建版本')
-            .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_HINT)
-        }
-        .width('100%')
-        .padding({ top: Spacing.LG, bottom: Spacing.LG })
-        .justifyContent(FlexAlign.Center)
-      } else {
-        ForEach(this.versions, (version: ArticleVersion) => {
-          this.VersionItemBuilder(version)
-        }, (version: ArticleVersion) => version.id)
-      }
-    }
-    .width('100%')
-    .backgroundColor(Colors.BG_PRIMARY)
-    .borderRadius(Radius.MD)
-    .padding(Spacing.BASE)
-    .margin({ top: Spacing.MD })
-  }
-
-  @Builder
-  VersionItemBuilder(version: ArticleVersion) {
-    Column({ space: Spacing.XS }) {
-      Row() {
-        Column({ space: Spacing.XS }) {
-          Row({ space: Spacing.SM }) {
-            Text(`版本 ${version.versionNumber}`)
-              .fontSize(Typography.BODY)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Colors.TEXT_PRIMARY)
-            Text(version.status === 'published' ? '已发布' : '草稿')
-              .fontSize(Typography.LABEL)
-              .fontColor(version.status === 'published' ? Colors.SUCCESS : Colors.TEXT_HINT)
-              .padding({ left: Spacing.XS, right: Spacing.XS })
-              .backgroundColor(version.status === 'published' ? 'rgba(76, 175, 80, 0.1)' : Colors.BG_SECONDARY)
-              .borderRadius(Radius.SM)
-          }
-
-          Text(version.title)
-            .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_SECONDARY)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-          Row({ space: Spacing.SM }) {
-            Text(formatDateTime(version.createdAt))
-              .fontSize(Typography.LABEL)
-              .fontColor(Colors.TEXT_HINT)
-            Text(`| ${this.getContentLength(version.content)} 字`)
-              .fontSize(Typography.LABEL)
-              .fontColor(Colors.TEXT_HINT)
-          }
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Row({ space: Spacing.SM }) {
-          Button(this.expandedVersionIds.includes(version.id) ? '收起' : '详情')
-            .type(ButtonType.Normal)
-            .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_SECONDARY)
-            .backgroundColor(Color.Transparent)
-            .height(32)
-            .padding({ left: Spacing.SM, right: Spacing.SM })
-            .onClick(() => { this.toggleVersionExpand(version.id) })
-
-          Button('删除')
-            .type(ButtonType.Normal)
-            .fontSize(Typography.CAPTION)
-            .fontColor(Colors.ERROR)
-            .backgroundColor(Color.Transparent)
-            .height(32)
-            .padding({ left: Spacing.SM, right: Spacing.SM })
-            .onClick(() => { this.handleDeleteVersion(version) })
-
-          Button('恢复')
-            .type(ButtonType.Normal)
-            .fontSize(Typography.CAPTION)
-            .fontColor(Colors.PRIMARY)
-            .backgroundColor(Color.Transparent)
-            .borderWidth(1)
-            .borderColor(Colors.PRIMARY)
-            .borderRadius(Radius.SM)
-            .height(32)
-            .padding({ left: Spacing.MD, right: Spacing.MD })
-            .onClick(() => { this.handleRestoreVersion(version) })
-        }
-      }
-      .width('100%')
-
-      if (this.expandedVersionIds.includes(version.id)) {
-        Column({ space: Spacing.XS }) {
-          Divider()
-            .width('100%')
-            .strokeWidth(0.5)
-            .color(Colors.DIVIDER)
-            .margin({ top: Spacing.SM, bottom: Spacing.SM })
-
-          Text('内容预览:')
-            .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_SECONDARY)
-
-          Text(version.content.length > 200 ? version.content.substring(0, 200) + '...' : version.content)
-            .fontSize(Typography.BODY)
-            .fontColor(Colors.TEXT_PRIMARY)
-            .maxLines(5)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-          if (version.content.length > 200) {
-              Text(`...共 ${this.getContentLength(version.content)} 字`)
-              .fontSize(Typography.CAPTION)
-              .fontColor(Colors.TEXT_HINT)
-          }
-        }
-        .width('100%')
-        .padding({ top: Spacing.XS })
-        .alignItems(HorizontalAlign.Start)
-      }
-    }
-    .width('100%')
-    .padding({ top: Spacing.SM, bottom: Spacing.SM })
-    .border({ width: { bottom: 0.5 }, color: Colors.DIVIDER })
   }
 
   // 辅助方法
@@ -2083,11 +1649,6 @@ ${htmlContent}
   getSelectedTopicName(): string {
     const found = this.topics.find((t: Topic) => t.id === this.selectedTopicId)
     return found ? found.title : '选择主题'
-  }
-
-  getSelectedSiteName(): string {
-    const found = this.sites.find((s: WordPressSite) => s.id === this.siteId)
-    return found ? found.siteName : '选择站点'
   }
 
   toggleCategory(catId: number): void {

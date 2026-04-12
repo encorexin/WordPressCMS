@@ -4,6 +4,7 @@ import { UserDao } from '../db/UserDao'
 import { CryptoService } from '../crypto/CryptoService'
 import { Logger } from '../../utils/Logger'
 import { User } from '../../models/User'
+import { AppStorageKeys, UserRole } from '../../constants/AppStorageKeys'
 
 // 认证结果
 export class AuthResult {
@@ -37,7 +38,7 @@ export class AuthService {
 
       // 第一个用户自动成为管理员
       const userCount = await UserDao.count()
-      const role = userCount === 0 ? 'admin' : 'user'
+      const role = userCount === 0 ? UserRole.Admin : UserRole.User
 
       // 哈希密码
       const passwordHash = await CryptoService.hashPassword(password)
@@ -96,9 +97,9 @@ export class AuthService {
   // 登出
   static logout(): void {
     CryptoService.clearPassword()
-    AppStorage.set<boolean>('isLoggedIn', false)
-    AppStorage.set<string>('currentUserId', '')
-    AppStorage.set<string>('currentUserRole', '')
+    AppStorage.set<boolean>(AppStorageKeys.IS_LOGGED_IN, false)
+    AppStorage.set<string>(AppStorageKeys.CURRENT_USER_ID, '')
+    AppStorage.set<string>(AppStorageKeys.CURRENT_USER_ROLE, UserRole.User)
   }
 
   // 将认证状态写入 AppStorage
@@ -106,14 +107,14 @@ export class AuthService {
   // 因为 isLoggedIn 变化会触发 Index 的 @Watch → 创建 DashboardPageContent
   // 如果 currentUserId 尚未写入，Dashboard.loadStats() 会因 userId 为空而短路返回 0
   static applySession(user: User): void {
-    AppStorage.set<string>('currentUserId', user.id)
-    AppStorage.set<string>('currentUserRole', user.role)
-    AppStorage.set<boolean>('isLoggedIn', true)
+    AppStorage.set<string>(AppStorageKeys.CURRENT_USER_ID, user.id)
+    AppStorage.set<string>(AppStorageKeys.CURRENT_USER_ROLE, user.role === UserRole.Admin ? UserRole.Admin : UserRole.User)
+    AppStorage.set<boolean>(AppStorageKeys.IS_LOGGED_IN, true)
   }
 
   // 验证当前会话是否有效（数据库中用户仍存在）
   static async validateSession(): Promise<boolean> {
-    const userId = AppStorage.get<string>('currentUserId') || ''
+    const userId = AppStorage.get<string>(AppStorageKeys.CURRENT_USER_ID) || ''
     if (userId.length === 0) {
       return false
     }
@@ -134,7 +135,7 @@ export class AuthService {
 
   // 获取当前登录用户
   static async getCurrentUser(): Promise<User | null> {
-    const userId = AppStorage.get<string>('currentUserId') || ''
+    const userId = AppStorage.get<string>(AppStorageKeys.CURRENT_USER_ID) || ''
     if (userId.length === 0) {
       return null
     }

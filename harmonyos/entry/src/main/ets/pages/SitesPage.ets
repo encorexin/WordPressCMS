@@ -1,6 +1,6 @@
 // 站点管理页面 — 对标 React Sites.tsx
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
 import { WordPressSite } from '../models/WordPressSite'
 import { SiteDao } from '../services/db/SiteDao'
 import { WordPressApi, WPResult } from '../services/http/WordPressApi'
@@ -10,17 +10,20 @@ import { Logger } from '../utils/Logger'
 import { UiFeedback } from '../utils/UiFeedback'
 import { SiteFormDialogComponent } from '../components/site/SiteFormDialog'
 import { SiteCardComponent } from '../components/site/SiteCard'
+import { BasicDataSource, calcCachedCount } from '../utils/BasicDataSource'
+import { AppStorageKeys } from '../constants/AppStorageKeys'
 
 @Component
 export struct SitesPageContent {
   @Consume('navPathStack') navPathStack: NavPathStack
-  @StorageProp('currentUserId') currentUserId: string = ''
+  @StorageProp(AppStorageKeys.CURRENT_USER_ID) currentUserId: string = ''
 
   @State sites: WordPressSite[] = []
   @State isLoading: boolean = true
   @State showFormDialog: boolean = false
   @State editingSite: WordPressSite | null = null
   @State testingId: string = ''  // 正在测试连接的站点 ID
+  private siteDataSource: BasicDataSource<WordPressSite> = new BasicDataSource<WordPressSite>([])
 
   aboutToAppear(): void {
     this.loadSites()
@@ -35,18 +38,18 @@ export struct SitesPageContent {
             Text('站点管理')
               .fontSize(Typography.TITLE)
               .fontWeight(FontWeight.Bold)
-              .fontColor(Colors.PRIMARY)
+              .fontColor(ResourceColors.PRIMARY)
             Text(`共 ${this.sites.length} 个站点`)
               .fontSize(Typography.BODY)
-              .fontColor(Colors.TEXT_SECONDARY)
+              .fontColor(ResourceColors.TEXT_SECONDARY)
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
 
           Button('添加站点', { type: ButtonType.Capsule })
             .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
-            .backgroundColor(Colors.PRIMARY)
-            .fontColor(Colors.TEXT_ON_PRIMARY)
+            .backgroundColor(ResourceColors.PRIMARY)
+            .fontColor(ResourceColors.TEXT_ON_PRIMARY)
             .fontSize(Typography.BODY)
             .fontWeight(FontWeight.Medium)
             .onClick(() => {
@@ -69,7 +72,7 @@ export struct SitesPageContent {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(Colors.BG_PRIMARY)
+      .backgroundColor(ResourceColors.BG_PRIMARY)
 
       // SiteFormDialogComponent 覆盖层
       if (this.showFormDialog) {
@@ -88,7 +91,7 @@ export struct SitesPageContent {
   @Builder
   SiteList() {
     List({ space: Spacing.MD }) {
-      ForEach(this.sites, (site: WordPressSite) => {
+      LazyForEach(this.siteDataSource, (site: WordPressSite) => {
         ListItem() {
           SiteCardComponent({
             site: site,
@@ -100,6 +103,7 @@ export struct SitesPageContent {
         }
       }, (site: WordPressSite) => site.id)
     }
+    .cachedCount(calcCachedCount(10))
     .width('100%')
     .layoutWeight(1)
     .padding({ left: Spacing.BASE, right: Spacing.BASE, bottom: Spacing.BASE })
@@ -111,17 +115,17 @@ export struct SitesPageContent {
     Column({ space: Spacing.BASE }) {
       SymbolGlyph($r('sys.symbol.link'))
         .fontSize(64)
-        .fontColor([Colors.TEXT_HINT])
+        .fontColor([ResourceColors.TEXT_HINT])
         .opacity(0.5)
 
       Text('暂无站点')
         .fontSize(Typography.SUBTITLE)
         .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
 
       Text('点击"添加站点"按钮开始添加您的 WordPress 网站')
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_SECONDARY)
+        .fontColor(ResourceColors.TEXT_SECONDARY)
         .textAlign(TextAlign.Center)
     }
     .width('100%')
@@ -140,22 +144,22 @@ export struct SitesPageContent {
             .width('60%')
             .height(20)
             .borderRadius(Radius.SM)
-            .backgroundColor(Colors.BG_SECONDARY)
+            .backgroundColor(ResourceColors.BG_SECONDARY)
           Row()
             .width('100%')
             .height(16)
             .borderRadius(Radius.SM)
-            .backgroundColor(Colors.BG_SECONDARY)
+            .backgroundColor(ResourceColors.BG_SECONDARY)
           Row()
             .width('40%')
             .height(16)
             .borderRadius(Radius.SM)
-            .backgroundColor(Colors.BG_SECONDARY)
+            .backgroundColor(ResourceColors.BG_SECONDARY)
         }
         .width('100%')
         .padding(Spacing.BASE)
         .borderRadius(Radius.LG)
-        .backgroundColor(Colors.BG_SECONDARY)
+        .backgroundColor(ResourceColors.BG_SECONDARY)
       }, (item: number) => item.toString())
     }
     .width('100%')
@@ -167,12 +171,15 @@ export struct SitesPageContent {
 
   private async loadSites(): Promise<void> {
     if (this.currentUserId.length === 0) {
+      this.sites = []
+      this.siteDataSource.setData([])
       this.isLoading = false
       return
     }
     try {
       this.isLoading = true
       this.sites = await SiteDao.findByUserId(this.currentUserId)
+      this.siteDataSource.setData(this.sites)
     } catch (err) {
       Logger.error('Load sites failed: %{public}s', String(err))
       UiFeedback.showToast({ message: '加载站点失败' })
@@ -242,7 +249,7 @@ export struct SitesPageContent {
       },
       secondaryButton: {
         value: '删除',
-        fontColor: Colors.ERROR,
+        fontColor: ResourceColors.ERROR,
         action: () => {
           this.doDelete(site.id)
         }

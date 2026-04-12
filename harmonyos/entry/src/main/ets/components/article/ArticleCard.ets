@@ -1,14 +1,24 @@
 // 文章卡片组件 — 提取自 ArticlesPage.ets
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
 import { Article } from '../../models/Article'
 import { formatRelativeTime } from '../../utils/DateUtil'
+import { ContentMetrics } from '../../utils/ContentMetrics'
 
+@Reusable
 @Component
 export struct ArticleCardComponent {
   @Prop article: Article = new Article()
   onTap: () => void = () => {}
   onDelete: () => void = () => {}
+
+  /**
+   * @Reusable 组件复用时重置内部状态
+   * 当前组件无 @State 内部状态，但保留此生命周期以防护后续新增状态时遗漏
+   */
+  aboutToReuse(): void {
+    // 当前无内部 @State 需要重置，@Prop 由父组件同步
+  }
 
   build() {
     Column({ space: Spacing.MD }) {
@@ -18,7 +28,7 @@ export struct ArticleCardComponent {
           Text(this.article.title.length > 0 ? this.article.title : '无标题')
             .fontSize(Typography.BODY_LARGE)
             .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
@@ -36,38 +46,45 @@ export struct ArticleCardComponent {
 
         Text(this.getStatusDescription(this.article.status))
           .fontSize(Typography.CAPTION)
-          .fontColor(Colors.TEXT_SECONDARY)
+          .fontColor(ResourceColors.TEXT_SECONDARY)
           .width('100%')
 
         // 元信息行（站点 + 日期 + 关键词）
         Row({ space: Spacing.MD }) {
           Text(this.getSiteLabel())
             .fontSize(Typography.CAPTION)
-            .fontColor(this.article.siteId.length > 0 ? Colors.PRIMARY : Colors.TEXT_HINT)
+            .fontColor(this.article.siteId.length > 0 ? ResourceColors.PRIMARY : ResourceColors.TEXT_HINT)
             .padding({ left: Spacing.SM, right: Spacing.SM, top: 2, bottom: 2 })
             .borderRadius(Radius.SM)
-            .backgroundColor(Colors.BG_PRIMARY)
+            .backgroundColor(ResourceColors.BG_PRIMARY)
+
+          Text(`${this.getWordCount()} 字`)
+            .fontSize(Typography.CAPTION)
+            .fontColor(ResourceColors.TEXT_HINT)
+            .padding({ left: Spacing.SM, right: Spacing.SM, top: 2, bottom: 2 })
+            .borderRadius(Radius.SM)
+            .backgroundColor(ResourceColors.BG_PRIMARY)
 
           if (this.article.keywords.length > 0) {
             Row({ space: 4 }) {
               Text('关键词:')
                 .fontSize(Typography.CAPTION)
-                .fontColor(Colors.TEXT_HINT)
+                .fontColor(ResourceColors.TEXT_HINT)
               Text(this.article.keywords)
                 .fontSize(Typography.CAPTION)
-                .fontColor(Colors.TEXT_SECONDARY)
+                .fontColor(ResourceColors.TEXT_SECONDARY)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .constraintSize({ maxWidth: 120 })
             }
             .padding({ left: Spacing.SM, right: Spacing.SM, top: 2, bottom: 2 })
             .borderRadius(Radius.SM)
-            .backgroundColor(Colors.BG_PRIMARY)
+            .backgroundColor(ResourceColors.BG_PRIMARY)
           }
 
           Text(formatRelativeTime(this.article.updatedAt))
             .fontSize(Typography.CAPTION)
-            .fontColor(Colors.TEXT_HINT)
+            .fontColor(ResourceColors.TEXT_HINT)
         }
         .width('100%')
       }
@@ -80,8 +97,8 @@ export struct ArticleCardComponent {
         Button(this.getPrimaryActionLabel(this.article.status), { type: ButtonType.Capsule })
           .layoutWeight(1)
           .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
-          .backgroundColor(Colors.PRIMARY)
-          .fontColor(Colors.TEXT_ON_PRIMARY)
+          .backgroundColor(ResourceColors.PRIMARY)
+          .fontColor(ResourceColors.TEXT_ON_PRIMARY)
           .fontSize(Typography.BODY)
           .fontWeight(FontWeight.Medium)
           .onClick(() => {
@@ -91,10 +108,10 @@ export struct ArticleCardComponent {
         Button('删除', { type: ButtonType.Capsule })
           .height(ComponentSize.BUTTON_HEIGHT_COMPACT)
           .fontSize(Typography.BODY)
-          .fontColor(Colors.ERROR)
+          .fontColor(ResourceColors.ERROR)
           .backgroundColor(Color.Transparent)
           .borderWidth(1)
-          .borderColor(Colors.BORDER)
+          .borderColor(ResourceColors.BORDER)
           .onClick(() => {
             this.onDelete()
           })
@@ -104,7 +121,7 @@ export struct ArticleCardComponent {
     .width('100%')
     .padding(Spacing.BASE)
     .borderRadius(Radius.LG)
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
   }
 
   private getStatusLabel(status: string): string {
@@ -141,23 +158,28 @@ export struct ArticleCardComponent {
     return this.article.siteId.length > 0 ? '已关联站点' : '未关联站点'
   }
 
+  private getWordCount(): number {
+    if (this.article.wordCount > 0) return this.article.wordCount
+    return ContentMetrics.countWords(this.article.content)
+  }
+
   private getStatusColor(status: string): string {
     switch (status) {
-      case 'published': return Colors.STATUS_PUBLISHED_TEXT
-      case 'draft': return Colors.STATUS_DRAFT_TEXT
-      case 'pending': return Colors.STATUS_PENDING_TEXT
-      case 'generating': return Colors.STATUS_GENERATING_TEXT
-      default: return Colors.TEXT_HINT
+      case 'published': return ResourceColors.SUCCESS
+      case 'draft': return ResourceColors.TEXT_SECONDARY
+      case 'pending': return ResourceColors.WARNING
+      case 'generating': return ResourceColors.PRIMARY
+      default: return ResourceColors.TEXT_HINT
     }
   }
 
   private getStatusBgColor(status: string): string {
     switch (status) {
-      case 'published': return Colors.STATUS_PUBLISHED_BG
-      case 'draft': return Colors.STATUS_DRAFT_BG
-      case 'pending': return Colors.STATUS_PENDING_BG
-      case 'generating': return Colors.STATUS_GENERATING_BG
-      default: return Colors.BG_SECONDARY
+      case 'published': return ResourceColors.SUCCESS_SOFT_BG
+      case 'draft': return ResourceColors.BG_SECONDARY
+      case 'pending': return ResourceColors.INFO_SOFT_BG
+      case 'generating': return ResourceColors.INFO_SOFT_BG
+      default: return ResourceColors.BG_SECONDARY
     }
   }
 }

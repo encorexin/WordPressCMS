@@ -2,6 +2,7 @@
 
 import { ThemeStore } from './ThemeStore'
 import { AuthStore } from './AuthStore'
+import { AppStorageKeys } from '../constants/AppStorageKeys'
 
 export class AppStore {
 
@@ -14,16 +15,16 @@ export class AppStore {
 
   // 初始化断点状态
   private static initBreakpoint(): void {
-    AppStorage.setOrCreate<string>('currentBreakpoint', 'sm')
+    AppStorage.setOrCreate<string>(AppStorageKeys.CURRENT_BREAKPOINT, 'sm')
   }
 
   // 更新断点（在根组件中通过 GridRow 的 onBreakpointChange 回调调用）
   static updateBreakpoint(breakpoint: string): void {
-    AppStorage.set<string>('currentBreakpoint', breakpoint)
+    AppStorage.set<string>(AppStorageKeys.CURRENT_BREAKPOINT, breakpoint)
   }
 
   // 获取当前断点
   static getBreakpoint(): string {
-    return AppStorage.get<string>('currentBreakpoint') || 'sm'
+    return AppStorage.get<string>(AppStorageKeys.CURRENT_BREAKPOINT) || 'sm'
   }
 }

@@ -52,8 +52,8 @@ import {
   setDefaultAISettings,
   testAIConnection,
   getDefaultSystemPrompt,
-} from "@/db/aiSettings";
-import type { AISettings } from "@/db/database";
+  type AISettings,
+} from "@/db/api";
 import { IMAGE_PROVIDERS } from "@/utils/imageGeneration";
 import { Switch } from "@/components/ui/switch";
 import { aiLogger } from "@/utils/logger";

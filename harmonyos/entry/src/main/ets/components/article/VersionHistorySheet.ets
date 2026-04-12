@@ -1,6 +1,6 @@
 // 版本历史底部弹窗组件 — 提取自 ArticleEditorPage.ets
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
 import { ArticleVersion } from '../../models/ArticleVersion'
 import { formatDateTime } from '../../utils/DateUtil'
 
@@ -32,7 +32,7 @@ export struct VersionHistorySheetComponent {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ResourceColors.OVERLAY_MASK)
         .onClick(() => {
           this.onClose()
         })
@@ -44,11 +44,11 @@ export struct VersionHistorySheetComponent {
           Text('版本历史')
             .fontSize(Typography.SUBTITLE)
             .fontWeight(FontWeight.Medium)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
             .layoutWeight(1)
           SymbolGlyph($r('sys.symbol.xmark'))
             .fontSize(ComponentSize.ICON_MD)
-            .fontColor([Colors.TEXT_HINT])
+            .fontColor([ResourceColors.TEXT_HINT])
             .onClick(() => {
               this.onClose()
             })
@@ -60,10 +60,10 @@ export struct VersionHistorySheetComponent {
           Column({ space: Spacing.SM }) {
             Text('暂无版本历史')
               .fontSize(Typography.BODY)
-              .fontColor(Colors.TEXT_HINT)
+              .fontColor(ResourceColors.TEXT_HINT)
             Text('保存文章后会自动创建版本')
               .fontSize(Typography.CAPTION)
-              .fontColor(Colors.TEXT_HINT)
+              .fontColor(ResourceColors.TEXT_HINT)
           }
           .width('100%')
           .padding({ top: Spacing.LG, bottom: Spacing.LG })
@@ -78,17 +78,17 @@ export struct VersionHistorySheetComponent {
                     Text(`版本 ${version.versionNumber}`)
                       .fontSize(Typography.BODY)
                       .fontWeight(FontWeight.Medium)
-                      .fontColor(Colors.TEXT_PRIMARY)
+                      .fontColor(ResourceColors.TEXT_PRIMARY)
                     Text(version.content.length > 80
                       ? version.content.substring(0, 80) + '...'
                       : version.content)
                       .fontSize(Typography.CAPTION)
-                      .fontColor(Colors.TEXT_SECONDARY)
+                      .fontColor(ResourceColors.TEXT_SECONDARY)
                       .maxLines(2)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                     Text(formatDateTime(version.createdAt))
                       .fontSize(Typography.LABEL)
-                      .fontColor(Colors.TEXT_HINT)
+                      .fontColor(ResourceColors.TEXT_HINT)
                   }
                   .layoutWeight(1)
                   .alignItems(HorizontalAlign.Start)
@@ -96,10 +96,10 @@ export struct VersionHistorySheetComponent {
                   Button('恢复')
                     .type(ButtonType.Normal)
                     .fontSize(Typography.CAPTION)
-                    .fontColor(Colors.PRIMARY)
+                    .fontColor(ResourceColors.PRIMARY)
                     .backgroundColor('transparent')
                     .borderWidth(1)
-                    .borderColor(Colors.PRIMARY)
+                    .borderColor(ResourceColors.PRIMARY)
                     .borderRadius(Radius.SM)
                     .height(32)
                     .padding({ left: Spacing.MD, right: Spacing.MD })
@@ -109,7 +109,7 @@ export struct VersionHistorySheetComponent {
                 }
                 .width('100%')
                 .padding({ top: Spacing.SM, bottom: Spacing.SM })
-                .border({ width: { bottom: 0.5 }, color: Colors.DIVIDER })
+                .border({ width: { bottom: 0.5 }, color: ResourceColors.DIVIDER })
               }, (version: ArticleVersion) => version.id)
             }
             .width('100%')
@@ -121,7 +121,7 @@ export struct VersionHistorySheetComponent {
       .width('100%')
       .padding({ left: Spacing.LG, right: Spacing.LG, top: Spacing.LG, bottom: Spacing.XL })
       .borderRadius({ topLeft: Radius.XL, topRight: Radius.XL })
-      .backgroundColor(Colors.BG_PRIMARY)
+      .backgroundColor(ResourceColors.BG_PRIMARY)
       .position({ x: 0, y: '100%' })
       .translate({ y: this.isVisible ? '-100%' : '0' })
       .animation({ duration: 300, curve: Curve.EaseOut })

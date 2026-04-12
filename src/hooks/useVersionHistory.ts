@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { getArticleVersions, type ArticleVersion } from "@/db/versionService";
+import { getArticleVersions, type ArticleVersion } from "@/db/api";
 import { handleApiError } from "@/utils/errorHandler";
 
 export interface UseVersionHistoryOptions {

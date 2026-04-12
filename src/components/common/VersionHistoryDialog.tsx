@@ -8,7 +8,6 @@ import {
   History,
   RotateCcw,
   Trash2,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -22,10 +21,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/context/LocalAuthProvider";
 import {
-  type ArticleVersion,
   deleteArticleVersion,
   getArticleVersions,
-} from "@/db/versionService";
+  type ArticleVersion,
+} from "@/db/api";
 import { logger } from "@/utils/logger";
 
 interface VersionHistoryDialogProps {
@@ -48,7 +47,6 @@ export function VersionHistoryDialog({
   const { user } = useAuth();
   const [versions, setVersions] = useState<ArticleVersion[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedVersion, setSelectedVersion] = useState<ArticleVersion | null>(null);
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
 
   const loadVersions = useCallback(async () => {
@@ -84,7 +82,7 @@ export function VersionHistoryDialog({
       await deleteArticleVersion(user.id, versionId);
       await loadVersions();
       toast.success("版本已删除");
-    } catch (error) {
+    } catch {
       toast.error("删除失败");
     }
   };
@@ -152,13 +150,11 @@ export function VersionHistoryDialog({
               <div className="space-y-2">
                 {versions.map((version, index) => {
                   const isExpanded = expandedVersions.has(version.id);
-                  const isSelected = selectedVersion?.id === version.id;
-
                   return (
                     <div
                       key={version.id}
                       className={`border rounded-lg overflow-hidden transition-colors ${
-                        isSelected
+                        isExpanded
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-primary/50"
                       }`}

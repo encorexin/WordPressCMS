@@ -4,8 +4,8 @@ import {
   deleteEncryptedArticleVersion,
   hasEncryptionKey,
 } from "./encryptedDatabase";
-import { generateId, getTimestamp } from "./database";
-import type { ArticleVersion } from "./database";
+import { generateId, getTimestamp } from "./models";
+import type { ArticleVersion } from "./models";
 
 // 最大保留版本数
 const MAX_VERSIONS = 50;

@@ -1,0 +1,21 @@
+{
+  "module": {
+    "name": "entry_test",
+    "type": "feature",
+    "description": "WordPressCMS Test Module",
+    "mainElement": "TestAbility",
+    "deviceTypes": [
+      "phone",
+      "tablet"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "abilities": [
+      {
+        "name": "TestAbility",
+        "srcEntry": "./ets/testability/TestAbility.ets",
+        "exported": true
+      }
+    ]
+  }
+}

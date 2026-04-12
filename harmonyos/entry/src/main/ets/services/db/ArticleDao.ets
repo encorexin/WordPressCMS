@@ -1,16 +1,17 @@
 // 文章表 CRUD
 
 import relationalStore from '@ohos.data.relationalStore'
-import { DatabaseHelper } from './DatabaseHelper'
 import { DatabaseSchema } from '../../constants/DatabaseSchema'
 import { Article } from '../../models/Article'
 import { generateId } from '../../utils/IdGenerator'
 import { getTimestamp } from '../../utils/DateUtil'
+import { Logger } from '../../utils/Logger'
+import { ContentMetrics } from '../../utils/ContentMetrics'
+import { BaseDao } from './BaseDao'
 
 export class ArticleDao {
-  private static getStore(): relationalStore.RdbStore {
-    return DatabaseHelper.getStore()
-  }
+  private static readonly baseDao: BaseDao<Article> =
+    new BaseDao<Article>(DatabaseSchema.TABLE_ARTICLES, ArticleDao.fromResultSet)
 
   static async insert(userId: string, title: string, siteId: string = '', content: string = '',
     keywords: string = '', template: string = '', wordpressPostId: string = '',
@@ -27,6 +28,8 @@ export class ArticleDao {
       article.template = template
       article.status = status.length > 0 ? status : 'draft'
       article.wordpressPostId = wordpressPostId
+      article.wordCount = ContentMetrics.countWords(article.content)
+      article.tokensUsed = 0
       article.createdAt = now
       article.updatedAt = now
 
@@ -40,10 +43,12 @@ export class ArticleDao {
         'template': article.template.length > 0 ? article.template : null,
         'status': article.status,
         'wordpress_post_id': article.wordpressPostId.length > 0 ? article.wordpressPostId : null,
+        'word_count': article.wordCount,
+        'tokens_used': article.tokensUsed,
         'created_at': article.createdAt,
         'updated_at': article.updatedAt
       }
-      await ArticleDao.getStore().insert(DatabaseSchema.TABLE_ARTICLES, bucket)
+      await ArticleDao.baseDao.getStore().insert(DatabaseSchema.TABLE_ARTICLES, bucket)
       return article
     } catch (err) {
       throw new Error(`Failed to insert article: ${String(err)}`)
@@ -51,7 +56,6 @@ export class ArticleDao {
   }
 
   static async findByUserId(userId: string, status: string = ''): Promise<Article[]> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_ARTICLES)
       predicates.equalTo('user_id', userId)
@@ -59,37 +63,19 @@ export class ArticleDao {
         predicates.equalTo('status', status)
       }
       predicates.orderByDesc('updated_at')
-      resultSet = await ArticleDao.getStore().query(predicates)
-      const articles: Article[] = []
-      while (resultSet.goToNextRow()) {
-        articles.push(ArticleDao.fromResultSet(resultSet))
-      }
-      return articles
+      return await ArticleDao.baseDao.queryList(predicates, 'ArticleDao.findByUserId')
     } catch (err) {
       throw new Error(`Failed to find articles by user: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
   static async findById(id: string): Promise<Article | null> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_ARTICLES)
       predicates.equalTo('id', id)
-      resultSet = await ArticleDao.getStore().query(predicates)
-      if (resultSet.goToFirstRow()) {
-        return ArticleDao.fromResultSet(resultSet)
-      }
-      return null
+      return await ArticleDao.baseDao.queryFirst(predicates, 'ArticleDao.findById')
     } catch (err) {
       throw new Error(`Failed to find article by id: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
@@ -97,6 +83,7 @@ export class ArticleDao {
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_ARTICLES)
       predicates.equalTo('id', article.id)
+      const wordCount = ContentMetrics.countWords(article.content)
       const bucket: relationalStore.ValuesBucket = {
         'site_id': article.siteId.length > 0 ? article.siteId : null,
         'title': article.title,
@@ -105,9 +92,11 @@ export class ArticleDao {
         'template': article.template.length > 0 ? article.template : null,
         'status': article.status,
         'wordpress_post_id': article.wordpressPostId.length > 0 ? article.wordpressPostId : null,
+        'word_count': wordCount,
+        'tokens_used': article.tokensUsed,
         'updated_at': getTimestamp()
       }
-      await ArticleDao.getStore().update(bucket, predicates)
+      await ArticleDao.baseDao.getStore().update(bucket, predicates)
     } catch (err) {
       throw new Error(`Failed to update article: ${String(err)}`)
     }
@@ -117,47 +106,42 @@ export class ArticleDao {
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_ARTICLES)
       predicates.equalTo('id', id)
-      await ArticleDao.getStore().delete(predicates)
+      await ArticleDao.baseDao.getStore().delete(predicates)
     } catch (err) {
       throw new Error(`Failed to delete article: ${String(err)}`)
     }
   }
 
   static async search(userId: string, query: string): Promise<Article[]> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_ARTICLES)
       predicates.equalTo('user_id', userId)
       predicates.contains('title', query)
       predicates.orderByDesc('updated_at')
-      resultSet = await ArticleDao.getStore().query(predicates)
-      const articles: Article[] = []
-      while (resultSet.goToNextRow()) {
-        articles.push(ArticleDao.fromResultSet(resultSet))
-      }
-      return articles
+      return await ArticleDao.baseDao.queryList(predicates, 'ArticleDao.search')
     } catch (err) {
       throw new Error(`Failed to search articles: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
   static async countByUserId(userId: string): Promise<number> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_ARTICLES)
       predicates.equalTo('user_id', userId)
-      resultSet = await ArticleDao.getStore().query(predicates)
-      return resultSet.rowCount
+      return await ArticleDao.baseDao.count(predicates, 'ArticleDao.countByUserId')
     } catch (err) {
       throw new Error(`Failed to count articles: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
+    }
+  }
+
+  static async countByUserIdAndStatus(userId: string, status: string): Promise<number> {
+    try {
+      const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_ARTICLES)
+      predicates.equalTo('user_id', userId)
+      predicates.equalTo('status', status)
+      return await ArticleDao.baseDao.count(predicates, 'ArticleDao.countByUserIdAndStatus')
+    } catch (err) {
+      throw new Error(`Failed to count articles by status: ${String(err)}`)
     }
   }
 
@@ -173,6 +157,23 @@ export class ArticleDao {
       article.template = rs.isColumnNull(rs.getColumnIndex('template')) ? '' : rs.getString(rs.getColumnIndex('template'))
       article.status = rs.getString(rs.getColumnIndex('status'))
       article.wordpressPostId = rs.isColumnNull(rs.getColumnIndex('wordpress_post_id')) ? '' : rs.getString(rs.getColumnIndex('wordpress_post_id'))
+      try {
+        const wcIndex = rs.getColumnIndex('word_count')
+        article.wordCount = rs.isColumnNull(wcIndex) ? 0 : rs.getLong(wcIndex)
+      } catch (wordCountErr) {
+        Logger.debug('ArticleDao.fromResultSet word_count fallback: %{public}s', String(wordCountErr))
+        article.wordCount = 0
+      }
+      try {
+        const tkIndex = rs.getColumnIndex('tokens_used')
+        article.tokensUsed = rs.isColumnNull(tkIndex) ? 0 : rs.getLong(tkIndex)
+      } catch (tokensErr) {
+        Logger.debug('ArticleDao.fromResultSet tokens_used fallback: %{public}s', String(tokensErr))
+        article.tokensUsed = 0
+      }
+      if (article.wordCount <= 0 && article.content.length > 0) {
+        article.wordCount = ContentMetrics.countWords(article.content)
+      }
       article.createdAt = rs.getString(rs.getColumnIndex('created_at'))
       article.updatedAt = rs.getString(rs.getColumnIndex('updated_at'))
       return article

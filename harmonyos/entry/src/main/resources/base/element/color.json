@@ -29,6 +29,26 @@
       "value": "#FFFFFF"
     },
     {
+      "name": "overlay_mask",
+      "value": "#66000000"
+    },
+    {
+      "name": "overlay_mask_strong",
+      "value": "#CC000000"
+    },
+    {
+      "name": "shadow_floating",
+      "value": "#40000000"
+    },
+    {
+      "name": "info_soft_bg",
+      "value": "#E8F3FF"
+    },
+    {
+      "name": "success_soft_bg",
+      "value": "#E6F7F0"
+    },
+    {
       "name": "text_primary",
       "value": "#121212"
     },
@@ -67,6 +87,14 @@
     {
       "name": "error",
       "value": "#FA2C2C"
+    },
+    {
+      "name": "warning_soft_bg",
+      "value": "#FFF3E0"
+    },
+    {
+      "name": "error_soft_bg",
+      "value": "#FDE8E8"
     }
   ]
 }

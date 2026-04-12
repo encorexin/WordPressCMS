@@ -1,5 +1,5 @@
-import { Command, Globe, Keyboard, LogOut, Menu, Monitor, Moon, Search, Shield, Sun, User, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Globe, Keyboard, LogOut, Menu, Monitor, Moon, Search, Shield, Sun, User, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,13 +36,8 @@ const Header = () => {
   // 快捷键帮助 ?
   useHotkey("?", () => setHelpOpen(true));
 
-  useEffect(() => {
-    if (user?.id) {
-      loadProfile();
-    }
-  }, [user]);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       if (user?.id) {
         const data = await getProfile(user.id);
@@ -51,7 +46,16 @@ const Header = () => {
     } catch (error) {
       logger.error("加载用户信息失败:", error);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
+      void loadProfile();
+      return;
+    }
+
+    setProfile(null);
+  }, [loadProfile, user?.id]);
 
   const navigation = routes.filter((route) => {
     if (route.visible === false) return false;

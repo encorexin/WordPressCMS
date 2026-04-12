@@ -5,6 +5,47 @@ import { WordPressSite } from '../../models/WordPressSite'
 import { Logger } from '../../utils/Logger'
 import http from '@ohos.net.http'
 
+interface WPCategoryPayload {
+  id?: number
+  name?: string
+  slug?: string
+  parent?: number
+  count?: number
+}
+
+interface WPTagPayload {
+  id?: number
+  name?: string
+  slug?: string
+}
+
+interface WPPublishPayload {
+  id?: string | number
+}
+
+interface WPErrorPayload {
+  message?: string
+}
+
+interface WPPublishRequestPayload {
+  title: string
+  content: string
+  status?: string
+  categories?: number[]
+  slug?: string
+}
+
+interface WPUpdateRequestPayload {
+  title: string
+  content: string
+  categories?: number[]
+  slug?: string
+}
+
+interface WPCreateTagRequestPayload {
+  name: string
+}
+
 // WordPress 分类
 export class WordPressCategory {
   id: number = 0
@@ -97,34 +138,11 @@ export class WordPressApi {
 
       if (response.success) {
         try {
-          const parsed: Record<string, Object>[] = JSON.parse(response.data) as Record<string, Object>[]
-          const categories: WordPressCategory[] = []
-          if (Array.isArray(parsed)) {
-            for (let i = 0; i < parsed.length; i++) {
-              const cat = new WordPressCategory()
-              const item = parsed[i]
-              if (typeof item['id'] === 'number') {
-                cat.id = item['id'] as number
-              }
-              if (typeof item['name'] === 'string') {
-                cat.name = item['name'] as string
-              }
-              if (typeof item['slug'] === 'string') {
-                cat.slug = item['slug'] as string
-              }
-              if (typeof item['parent'] === 'number') {
-                cat.parent = item['parent'] as number
-              }
-              if (typeof item['count'] === 'number') {
-                cat.count = item['count'] as number
-              }
-              categories.push(cat)
-            }
-          }
-          result.categories = categories
+          result.categories = WordPressApi.parseCategoryList(response.data)
           result.success = true
           result.message = '获取成功'
-        } catch (_err) {
+        } catch (parseErr) {
+          Logger.warn('WordPressApi.getCategories parse failed: %{public}s', String(parseErr))
           result.message = '解析分类数据失败'
         }
       } else {
@@ -148,29 +166,27 @@ export class WordPressApi {
     const result = new WPPublishResult()
     try {
       const url = `${WordPressApi.getApiUrl(site.siteUrl)}/posts`
-      const postData: Record<string, Object> = {
-        'title': title,
-        'content': content,
-        'status': 'publish'
+      const postData: WPPublishRequestPayload = {
+        title,
+        content,
+        status: 'publish'
       }
       if (categories && categories.length > 0) {
-        postData['categories'] = categories
+        postData.categories = categories
       }
       if (slug && slug.length > 0) {
-        postData['slug'] = slug
+        postData.slug = slug
       }
 
       const response = await HttpClient.postJson(url, JSON.stringify(postData), WordPressApi.getAuthHeaders(site))
 
       if (response.success) {
         try {
-          const parsed: Record<string, Object> = JSON.parse(response.data) as Record<string, Object>
           result.success = true
-          if (parsed['id'] !== undefined && parsed['id'] !== null) {
-            result.postId = String(parsed['id'])
-          }
+          result.postId = WordPressApi.parsePublishPostId(response.data)
           result.message = '发布成功'
-        } catch (_err) {
+        } catch (parseErr) {
+          Logger.warn('WordPressApi.publishPost parse failed: %{public}s', String(parseErr))
           result.message = '解析发布响应失败'
         }
       } else {
@@ -195,15 +211,15 @@ export class WordPressApi {
     const result = new WPResult()
     try {
       const url = `${WordPressApi.getApiUrl(site.siteUrl)}/posts/${postId}`
-      const postData: Record<string, Object> = {
-        'title': title,
-        'content': content
+      const postData: WPUpdateRequestPayload = {
+        title,
+        content
       }
       if (categories && categories.length > 0) {
-        postData['categories'] = categories
+        postData.categories = categories
       }
       if (slug && slug.length > 0) {
-        postData['slug'] = slug
+        postData.slug = slug
       }
 
       const response = await HttpClient.postJson(url, JSON.stringify(postData), WordPressApi.getAuthHeaders(site))
@@ -253,28 +269,11 @@ export class WordPressApi {
 
       if (response.success) {
         try {
-          const parsed: Record<string, Object>[] = JSON.parse(response.data) as Record<string, Object>[]
-          const tags: WordPressTag[] = []
-          if (Array.isArray(parsed)) {
-            for (let i = 0; i < parsed.length; i++) {
-              const tag = new WordPressTag()
-              const item = parsed[i]
-              if (typeof item['id'] === 'number') {
-                tag.id = item['id'] as number
-              }
-              if (typeof item['name'] === 'string') {
-                tag.name = item['name'] as string
-              }
-              if (typeof item['slug'] === 'string') {
-                tag.slug = item['slug'] as string
-              }
-              tags.push(tag)
-            }
-          }
-          result.tags = tags
+          result.tags = WordPressApi.parseTagList(response.data)
           result.success = true
           result.message = '获取成功'
-        } catch (_err) {
+        } catch (parseErr) {
+          Logger.warn('WordPressApi.getTags parse failed: %{public}s', String(parseErr))
           result.message = '解析标签数据失败'
         }
       } else {
@@ -292,24 +291,21 @@ export class WordPressApi {
     const result = new WPCreateTagResult()
     try {
       const url = `${WordPressApi.getApiUrl(site.siteUrl)}/tags`
-      const postData: Record<string, Object> = {
-        'name': name
+      const postData: WPCreateTagRequestPayload = {
+        name
       }
 
       const response = await HttpClient.postJson(url, JSON.stringify(postData), WordPressApi.getAuthHeaders(site))
 
       if (response.success) {
         try {
-          const parsed: Record<string, Object> = JSON.parse(response.data) as Record<string, Object>
           result.success = true
-          if (typeof parsed['id'] === 'number') {
-            result.tagId = parsed['id'] as number
-          }
-          if (typeof parsed['name'] === 'string') {
-            result.tagName = parsed['name'] as string
-          }
+          const parsed = WordPressApi.parseCreatedTag(response.data)
+          result.tagId = parsed.id
+          result.tagName = parsed.name
           result.message = '创建成功'
-        } catch (_err) {
+        } catch (parseErr) {
+          Logger.warn('WordPressApi.createTag parse failed: %{public}s', String(parseErr))
           result.message = '解析创建响应失败'
         }
       } else {
@@ -334,13 +330,88 @@ export class WordPressApi {
   // 从响应体提取错误信息
   private static extractErrorMessage(responseData: string, code: number): string {
     try {
-      const parsed: Record<string, Object> = JSON.parse(responseData) as Record<string, Object>
-      if (typeof parsed['message'] === 'string' && (parsed['message'] as string).length > 0) {
-        return parsed['message'] as string
+      const parsed = JSON.parse(responseData) as WPErrorPayload
+      if (typeof parsed.message === 'string' && parsed.message.length > 0) {
+        return parsed.message
       }
-    } catch (_e) {
-      // ignore
+    } catch (parseErr) {
+      Logger.debug('WordPressApi.extractErrorMessage parse skipped: %{public}s', String(parseErr))
     }
     return `请求失败: ${code}`
+  }
+
+  private static parseCategoryList(responseData: string): WordPressCategory[] {
+    const parsed = JSON.parse(responseData) as WPCategoryPayload[]
+    if (!Array.isArray(parsed)) {
+      throw new Error('Category response is not an array')
+    }
+    const categories: WordPressCategory[] = []
+    for (let i = 0; i < parsed.length; i++) {
+      const item = parsed[i]
+      const category = new WordPressCategory()
+      if (typeof item.id === 'number') {
+        category.id = item.id
+      }
+      if (typeof item.name === 'string') {
+        category.name = item.name
+      }
+      if (typeof item.slug === 'string') {
+        category.slug = item.slug
+      }
+      if (typeof item.parent === 'number') {
+        category.parent = item.parent
+      }
+      if (typeof item.count === 'number') {
+        category.count = item.count
+      }
+      categories.push(category)
+    }
+    return categories
+  }
+
+  private static parsePublishPostId(responseData: string): string {
+    const parsed = JSON.parse(responseData) as WPPublishPayload
+    if (parsed.id === undefined || parsed.id === null) {
+      return ''
+    }
+    return String(parsed.id)
+  }
+
+  private static parseTagList(responseData: string): WordPressTag[] {
+    const parsed = JSON.parse(responseData) as WPTagPayload[]
+    if (!Array.isArray(parsed)) {
+      throw new Error('Tag response is not an array')
+    }
+    const tags: WordPressTag[] = []
+    for (let i = 0; i < parsed.length; i++) {
+      const item = parsed[i]
+      const tag = new WordPressTag()
+      if (typeof item.id === 'number') {
+        tag.id = item.id
+      }
+      if (typeof item.name === 'string') {
+        tag.name = item.name
+      }
+      if (typeof item.slug === 'string') {
+        tag.slug = item.slug
+      }
+      tags.push(tag)
+    }
+    return tags
+  }
+
+  private static parseCreatedTag(responseData: string): WordPressTag {
+    const parsed = JSON.parse(responseData) as WPTagPayload
+    const tag = new WordPressTag()
+    if (typeof parsed.id === 'number') {
+      tag.id = parsed.id
+    }
+    if (typeof parsed.name === 'string') {
+      tag.name = parsed.name
+    }
+    if (typeof parsed.slug === 'string') {
+      tag.slug = parsed.slug
+    }
+    return tag
   }
 }

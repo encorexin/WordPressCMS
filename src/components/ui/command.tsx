@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { SearchIcon, XIcon } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";

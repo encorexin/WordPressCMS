@@ -1,6 +1,6 @@
 // 主入口页面 — 导航 + Tab 框架
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../constants/DesignTokens'
 import { Routes } from '../constants/Routes'
 import { ConfirmDialog } from '../components/common/ConfirmDialog'
 import { LoginPageContent } from './LoginPage'
@@ -18,20 +18,21 @@ import { AboutPageContent } from './AboutPage'
 import { AuthService } from '../services/auth/AuthService'
 import { Logger } from '../utils/Logger'
 import { UiFeedback, ConfirmOptions } from '../utils/UiFeedback'
+import { AppStorageKeys, UserRole } from '../constants/AppStorageKeys'
 
 @Entry
 @Component
 struct Index {
-  @StorageProp('isLoggedIn') @Watch('onLoginStateChanged') isLoggedIn: boolean = false
+  @StorageProp(AppStorageKeys.IS_LOGGED_IN) @Watch('onLoginStateChanged') isLoggedIn: boolean = false
   @Provide('navPathStack') navPathStack: NavPathStack = new NavPathStack()
   @State currentTabIndex: number = 0
-  @StorageProp('currentBreakpoint') currentBreakpoint: string = 'sm'
-  @StorageProp('currentUserId') currentUserId: string = ''
-  @StorageProp('currentUserRole') currentUserRole: string = 'user'
+  @StorageProp(AppStorageKeys.CURRENT_BREAKPOINT) currentBreakpoint: string = 'sm'
+  @StorageProp(AppStorageKeys.CURRENT_USER_ID) currentUserId: string = ''
+  @StorageProp(AppStorageKeys.CURRENT_USER_ROLE) currentUserRole: UserRole = UserRole.User
   private confirmDialogController: CustomDialogController | null = null
 
   aboutToAppear(): void {
-    AppStorage.setOrCreate<number>('dashboardRefreshSignal', 0)
+    AppStorage.setOrCreate<number>(AppStorageKeys.DASHBOARD_REFRESH_SIGNAL, 0)
     UiFeedback.setConfirmHandler((options: ConfirmOptions) => {
       this.openConfirmDialog(options)
     })
@@ -45,8 +46,8 @@ struct Index {
   // 登录状态变更时，触发 Dashboard 刷新信号让统计数据加载
   private onLoginStateChanged(): void {
     if (this.isLoggedIn) {
-      const current = AppStorage.get<number>('dashboardRefreshSignal') ?? 0
-      AppStorage.setOrCreate<number>('dashboardRefreshSignal', current + 1)
+      const current = AppStorage.get<number>(AppStorageKeys.DASHBOARD_REFRESH_SIGNAL) ?? 0
+      AppStorage.setOrCreate<number>(AppStorageKeys.DASHBOARD_REFRESH_SIGNAL, current + 1)
     }
   }
 
@@ -85,8 +86,8 @@ struct Index {
           this.currentTabIndex = index
           // 切换到首页Tab时触发Dashboard刷新
           if (index === 0) {
-            const current = AppStorage.get<number>('dashboardRefreshSignal') ?? 0
-            AppStorage.setOrCreate<number>('dashboardRefreshSignal', current + 1)
+            const current = AppStorage.get<number>(AppStorageKeys.DASHBOARD_REFRESH_SIGNAL) ?? 0
+            AppStorage.setOrCreate<number>(AppStorageKeys.DASHBOARD_REFRESH_SIGNAL, current + 1)
           }
         })
       }
@@ -101,11 +102,11 @@ struct Index {
     Column({ space: 2 }) {
       SymbolGlyph($r(`sys.symbol.${this.currentTabIndex === index ? iconSelected : iconNormal}`))
         .fontSize(ComponentSize.ICON_MD)
-        .fontColor([this.currentTabIndex === index ? Colors.PRIMARY : Colors.TEXT_HINT])
+        .fontColor([this.currentTabIndex === index ? ResourceColors.PRIMARY : ResourceColors.TEXT_HINT])
         .accessibilityText(label)
       Text(label)
         .fontSize(10)
-        .fontColor(this.currentTabIndex === index ? Colors.PRIMARY : Colors.TEXT_HINT)
+        .fontColor(this.currentTabIndex === index ? ResourceColors.PRIMARY : ResourceColors.TEXT_HINT)
     }
     .width('100%')
     .height('100%')
@@ -120,7 +121,7 @@ struct Index {
         Text('设置')
           .fontSize(Typography.TITLE)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.PRIMARY)
+          .fontColor(ResourceColors.PRIMARY)
         Blank()
       }
       .width('100%')
@@ -133,7 +134,7 @@ struct Index {
           Column({ space: 0 }) {
             Text('内容管理')
               .fontSize(Typography.CAPTION)
-              .fontColor(Colors.TEXT_SECONDARY)
+              .fontColor(ResourceColors.TEXT_SECONDARY)
               .fontWeight(FontWeight.Medium)
               .width('100%')
               .padding({ left: Spacing.BASE, bottom: Spacing.SM })
@@ -159,7 +160,7 @@ struct Index {
           Column({ space: 0 }) {
             Text('系统设置')
               .fontSize(Typography.CAPTION)
-              .fontColor(Colors.TEXT_SECONDARY)
+              .fontColor(ResourceColors.TEXT_SECONDARY)
               .fontWeight(FontWeight.Medium)
               .width('100%')
               .padding({ left: Spacing.BASE, bottom: Spacing.SM })
@@ -175,7 +176,7 @@ struct Index {
             })
 
             // 用户管理 (仅管理员可见)
-            if (this.currentUserRole === 'admin') {
+            if (this.currentUserRole === UserRole.Admin) {
               this.SettingsListItem('用户管理', 'person_2', () => {
                 this.navPathStack.pushPathByName(Routes.ADMIN, null)
               })
@@ -187,7 +188,7 @@ struct Index {
           Column({ space: 0 }) {
             Text('其他')
               .fontSize(Typography.CAPTION)
-              .fontColor(Colors.TEXT_SECONDARY)
+              .fontColor(ResourceColors.TEXT_SECONDARY)
               .fontWeight(FontWeight.Medium)
               .width('100%')
               .padding({ left: Spacing.BASE, bottom: Spacing.SM })
@@ -215,7 +216,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Colors.BG_PRIMARY)
+    .backgroundColor(ResourceColors.BG_PRIMARY)
   }
 
   @Builder
@@ -223,22 +224,22 @@ struct Index {
     Row({ space: Spacing.MD }) {
       SymbolGlyph($r(`sys.symbol.${iconName}`))
         .fontSize(ComponentSize.ICON_MD)
-        .fontColor([Colors.TEXT_SECONDARY])
+        .fontColor([ResourceColors.TEXT_SECONDARY])
 
       Text(label)
         .fontSize(Typography.BODY_LARGE)
-        .fontColor(Colors.TEXT_PRIMARY)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
 
       Blank()
 
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(ComponentSize.ICON_MD)
-        .fontColor([Colors.ARROW])
+        .fontColor([ResourceColors.ARROW])
     }
     .width('100%')
     .height(ComponentSize.LIST_ITEM_HEIGHT)
     .padding({ left: Spacing.BASE, right: Spacing.BASE })
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
     .borderRadius(Radius.MD)
     .margin({ bottom: Spacing.SM })
     .onClick(onClickAction)
@@ -291,7 +292,7 @@ struct Index {
       },
       secondaryButton: {
         value: '退出',
-        fontColor: Colors.ERROR,
+        fontColor: ResourceColors.ERROR,
         action: () => {
           AuthService.logout()
           UiFeedback.showToast({ message: '已退出登录' })
@@ -320,8 +321,8 @@ struct Index {
           message: options.message,
           cancelText: options.primaryButton.value,
           confirmText: options.secondaryButton.value,
-          cancelFontColor: options.primaryButton.fontColor ?? Colors.TEXT_PRIMARY,
-          confirmFontColor: options.secondaryButton.fontColor ?? Colors.PRIMARY,
+          cancelFontColor: options.primaryButton.fontColor ?? ResourceColors.TEXT_PRIMARY,
+          confirmFontColor: options.secondaryButton.fontColor ?? ResourceColors.PRIMARY,
           onCancel: () => {
             this.executeConfirmAction('primary', options.primaryButton.action, closeDialog)
           },

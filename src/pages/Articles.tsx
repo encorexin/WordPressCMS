@@ -27,9 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/context/LocalAuthProvider";
-import { deleteArticle, getArticles } from "@/db/api";
+import { deleteArticle, deleteAllArticleVersions, getArticles } from "@/db/api";
 import { logger } from "@/utils/logger";
-import { deleteAllArticleVersions } from "@/db/versionService";
 import type { ArticleWithSite } from "@/types/types";
 
 export default function Articles() {

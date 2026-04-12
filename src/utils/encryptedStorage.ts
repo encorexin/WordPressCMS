@@ -406,7 +406,9 @@ export function clearAllUserData(userId: string): void {
         }
     }
 
-    keysToRemove.forEach(key => localStorage.removeItem(key));
+    keysToRemove.forEach((key) => {
+        localStorage.removeItem(key);
+    });
 }
 
 /**

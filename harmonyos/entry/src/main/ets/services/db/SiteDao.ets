@@ -1,17 +1,16 @@
 // 站点表 CRUD
 
 import relationalStore from '@ohos.data.relationalStore'
-import { DatabaseHelper } from './DatabaseHelper'
 import { DatabaseSchema } from '../../constants/DatabaseSchema'
 import { WordPressSite } from '../../models/WordPressSite'
 import { generateId } from '../../utils/IdGenerator'
 import { getTimestamp } from '../../utils/DateUtil'
 import { CryptoService } from '../crypto/CryptoService'
+import { BaseDao } from './BaseDao'
 
 export class SiteDao {
-  private static getStore(): relationalStore.RdbStore {
-    return DatabaseHelper.getStore()
-  }
+  private static readonly baseDao: BaseDao<WordPressSite> =
+    new BaseDao<WordPressSite>(DatabaseSchema.TABLE_SITES, SiteDao.syncFromResultSet)
 
   static async insert(userId: string, siteName: string, siteUrl: string,
     username: string, appPassword: string): Promise<WordPressSite> {
@@ -28,7 +27,7 @@ export class SiteDao {
       site.createdAt = now
       site.updatedAt = now
 
-      const encryptedPassword = await CryptoService.encrypt(site.appPassword)
+      const encryptedPassword = await CryptoService.encryptField(site.appPassword)
 
       const bucket: relationalStore.ValuesBucket = {
         'id': site.id,
@@ -41,7 +40,7 @@ export class SiteDao {
         'created_at': site.createdAt,
         'updated_at': site.updatedAt
       }
-      await SiteDao.getStore().insert(DatabaseSchema.TABLE_SITES, bucket)
+      await SiteDao.baseDao.getStore().insert(DatabaseSchema.TABLE_SITES, bucket)
       return site
     } catch (err) {
       throw new Error(`Failed to insert site: ${String(err)}`)
@@ -49,42 +48,23 @@ export class SiteDao {
   }
 
   static async findByUserId(userId: string): Promise<WordPressSite[]> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_SITES)
       predicates.equalTo('user_id', userId)
       predicates.orderByDesc('created_at')
-      resultSet = await SiteDao.getStore().query(predicates)
-      const sites: WordPressSite[] = []
-      while (resultSet.goToNextRow()) {
-        sites.push(await SiteDao.fromResultSet(resultSet))
-      }
-      return sites
+      return await SiteDao.baseDao.queryListAsync(predicates, 'SiteDao.findByUserId', SiteDao.fromResultSet)
     } catch (err) {
       throw new Error(`Failed to find sites by user: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
   static async findById(id: string): Promise<WordPressSite | null> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_SITES)
       predicates.equalTo('id', id)
-      resultSet = await SiteDao.getStore().query(predicates)
-      if (resultSet.goToFirstRow()) {
-        return await SiteDao.fromResultSet(resultSet)
-      }
-      return null
+      return await SiteDao.baseDao.queryFirstAsync(predicates, 'SiteDao.findById', SiteDao.fromResultSet)
     } catch (err) {
       throw new Error(`Failed to find site by id: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
@@ -92,7 +72,7 @@ export class SiteDao {
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_SITES)
       predicates.equalTo('id', site.id)
-      const encryptedPassword = await CryptoService.encrypt(site.appPassword)
+      const encryptedPassword = await CryptoService.encryptField(site.appPassword)
       const bucket: relationalStore.ValuesBucket = {
         'site_name': site.siteName,
         'site_url': site.siteUrl,
@@ -101,7 +81,7 @@ export class SiteDao {
         'status': site.status,
         'updated_at': getTimestamp()
       }
-      await SiteDao.getStore().update(bucket, predicates)
+      await SiteDao.baseDao.getStore().update(bucket, predicates)
     } catch (err) {
       throw new Error(`Failed to update site: ${String(err)}`)
     }
@@ -111,29 +91,31 @@ export class SiteDao {
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_SITES)
       predicates.equalTo('id', id)
-      await SiteDao.getStore().delete(predicates)
+      await SiteDao.baseDao.getStore().delete(predicates)
     } catch (err) {
       throw new Error(`Failed to delete site: ${String(err)}`)
     }
   }
 
   static async countByUserId(userId: string): Promise<number> {
-    let resultSet: relationalStore.ResultSet | null = null
     try {
       const predicates = new relationalStore.RdbPredicates(DatabaseSchema.TABLE_SITES)
       predicates.equalTo('user_id', userId)
-      resultSet = await SiteDao.getStore().query(predicates)
-      return resultSet.rowCount
+      return await SiteDao.baseDao.count(predicates, 'SiteDao.countByUserId')
     } catch (err) {
       throw new Error(`Failed to count sites: ${String(err)}`)
-    } finally {
-      if (resultSet !== null) {
-        try { resultSet.close() } catch (_err) {}
-      }
     }
   }
 
-  private static async fromResultSet(rs: relationalStore.ResultSet): Promise<WordPressSite> {
+  /** 同步映射 — 供 BaseDao 构造函数使用（不支持解密，仅 count 等 SQL 聚合场景） */
+  private static syncFromResultSet(_rs: relationalStore.ResultSet): WordPressSite {
+    // SiteDao 的完整映射需要异步解密，此处仅作 BaseDao 占位
+    const site = new WordPressSite()
+    return site
+  }
+
+  /** 异步映射 — 支持加密字段解密 */
+  static async fromResultSet(rs: relationalStore.ResultSet): Promise<WordPressSite> {
     try {
       const site = new WordPressSite()
       site.id = rs.getString(rs.getColumnIndex('id'))
@@ -142,9 +124,7 @@ export class SiteDao {
       site.siteUrl = rs.getString(rs.getColumnIndex('site_url'))
       site.username = rs.getString(rs.getColumnIndex('username'))
       const storedPassword = rs.getString(rs.getColumnIndex('app_password'))
-      site.appPassword = CryptoService.isEncrypted(storedPassword)
-        ? await CryptoService.decrypt(storedPassword)
-        : storedPassword
+      site.appPassword = await CryptoService.decryptField(storedPassword)
       site.status = rs.getString(rs.getColumnIndex('status'))
       site.createdAt = rs.getString(rs.getColumnIndex('created_at'))
       site.updatedAt = rs.getString(rs.getColumnIndex('updated_at'))

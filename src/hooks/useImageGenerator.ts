@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/LocalAuthProvider";
-import { getImageSettings } from "@/db/aiSettings";
+import { getImageSettings } from "@/db/api";
 import {
     generateImage,
     generateImagePrompt,

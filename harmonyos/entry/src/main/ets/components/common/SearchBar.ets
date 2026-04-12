@@ -1,6 +1,6 @@
 // 搜索栏组件
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
 
 @Component
 export struct SearchBar {
@@ -13,7 +13,7 @@ export struct SearchBar {
     Row() {
       SymbolGlyph($r('sys.symbol.magnifyingglass'))
         .fontSize(ComponentSize.ICON_MD)
-        .fontColor([Colors.TEXT_HINT])
+        .fontColor([ResourceColors.TEXT_HINT])
         .margin({ right: Spacing.SM })
         .accessibilityText('搜索')
 
@@ -21,8 +21,8 @@ export struct SearchBar {
         .layoutWeight(1)
         .height(40)
         .fontSize(Typography.BODY)
-        .fontColor(Colors.TEXT_PRIMARY)
-        .placeholderColor(Colors.TEXT_HINT)
+        .fontColor(ResourceColors.TEXT_PRIMARY)
+        .placeholderColor(ResourceColors.TEXT_HINT)
         .backgroundColor(Color.Transparent)
         .onChange((value: string) => {
           this.onTextChange(value)
@@ -34,7 +34,7 @@ export struct SearchBar {
       if (this.value.length > 0) {
         SymbolGlyph($r('sys.symbol.xmark'))
           .fontSize(ComponentSize.ICON_SM)
-          .fontColor([Colors.TEXT_HINT])
+          .fontColor([ResourceColors.TEXT_HINT])
           .margin({ left: Spacing.SM })
           .onClick(() => {
             this.onTextChange('')
@@ -44,7 +44,7 @@ export struct SearchBar {
     .width('100%')
     .height(ComponentSize.INPUT_HEIGHT)
     .padding({ left: Spacing.BASE, right: Spacing.BASE })
-    .backgroundColor(Colors.BG_SECONDARY)
+    .backgroundColor(ResourceColors.BG_SECONDARY)
     .borderRadius(Radius.LG)
     .alignItems(VerticalAlign.Center)
   }

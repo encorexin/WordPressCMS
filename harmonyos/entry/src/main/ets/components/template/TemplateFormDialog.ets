@@ -1,6 +1,6 @@
 // 模板表单对话框组件 — 提取自 TemplatesPage.ets
 
-import { Colors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
+import { ResourceColors, Typography, Spacing, Radius, ComponentSize } from '../../constants/DesignTokens'
 import { ArticleTemplate } from '../../models/ArticleTemplate'
 
 @Component
@@ -48,7 +48,7 @@ export struct TemplateFormDialogComponent {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ResourceColors.OVERLAY_MASK)
         .onClick(() => {
           if (!this.isSubmitting) {
             this.onClose()
@@ -62,11 +62,11 @@ export struct TemplateFormDialogComponent {
           Text(this.editingTemplate !== null ? '编辑模板' : '新建模板')
             .fontSize(Typography.TITLE)
             .fontWeight(FontWeight.Bold)
-            .fontColor(Colors.TEXT_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
           Blank()
           SymbolGlyph($r('sys.symbol.xmark'))
             .fontSize(ComponentSize.ICON_MD)
-            .fontColor([Colors.TEXT_SECONDARY])
+            .fontColor([ResourceColors.TEXT_SECONDARY])
             .accessibilityText('关闭')
             .onClick(() => {
               if (!this.isSubmitting) {
@@ -79,7 +79,7 @@ export struct TemplateFormDialogComponent {
 
         Text('创建自定义的文章生成模板')
           .fontSize(Typography.BODY)
-          .fontColor(Colors.TEXT_HINT)
+          .fontColor(ResourceColors.TEXT_HINT)
           .padding({ left: Spacing.BASE, right: Spacing.BASE, bottom: Spacing.SM })
 
         // 可滚动表单
@@ -90,12 +90,12 @@ export struct TemplateFormDialogComponent {
               Text('模板名称')
                 .fontSize(Typography.BODY)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(Colors.TEXT_PRIMARY)
+                .fontColor(ResourceColors.TEXT_PRIMARY)
               TextInput({ text: this.formName, placeholder: '如：技术教程、产品评测' })
                 .height(ComponentSize.BUTTON_HEIGHT)
                 .fontSize(Typography.BODY)
-                .fontColor(Colors.TEXT_PRIMARY)
-                .placeholderColor(Colors.TEXT_HINT)
+                .fontColor(ResourceColors.TEXT_PRIMARY)
+                .placeholderColor(ResourceColors.TEXT_HINT)
                 .onChange((value: string) => { this.formName = value })
             }
             .width('100%')
@@ -106,12 +106,12 @@ export struct TemplateFormDialogComponent {
               Text('描述（可选）')
                 .fontSize(Typography.BODY)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(Colors.TEXT_PRIMARY)
+                .fontColor(ResourceColors.TEXT_PRIMARY)
               TextInput({ text: this.formDescription, placeholder: '简单描述这个模板的用途' })
                 .height(ComponentSize.BUTTON_HEIGHT)
                 .fontSize(Typography.BODY)
-                .fontColor(Colors.TEXT_PRIMARY)
-                .placeholderColor(Colors.TEXT_HINT)
+                .fontColor(ResourceColors.TEXT_PRIMARY)
+                .placeholderColor(ResourceColors.TEXT_HINT)
                 .onChange((value: string) => { this.formDescription = value })
             }
             .width('100%')
@@ -122,17 +122,17 @@ export struct TemplateFormDialogComponent {
               Text('系统提示词')
                 .fontSize(Typography.BODY)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(Colors.TEXT_PRIMARY)
+                .fontColor(ResourceColors.TEXT_PRIMARY)
               TextArea({ text: this.formSystemPrompt, placeholder: '定义 AI 的角色和生成要求...' })
                 .height(200)
                 .fontSize(Typography.LABEL)
-                .fontColor(Colors.TEXT_PRIMARY)
-                .placeholderColor(Colors.TEXT_HINT)
+                .fontColor(ResourceColors.TEXT_PRIMARY)
+                .placeholderColor(ResourceColors.TEXT_HINT)
                 .fontFamily('monospace')
                 .onChange((value: string) => { this.formSystemPrompt = value })
               Text('提示：使用 {keywords} 和 {template} 作为占位符')
                 .fontSize(Typography.LABEL)
-                .fontColor(Colors.TEXT_HINT)
+                .fontColor(ResourceColors.TEXT_HINT)
             }
             .width('100%')
             .alignItems(HorizontalAlign.Start)
@@ -148,16 +148,16 @@ export struct TemplateFormDialogComponent {
             .layoutWeight(1)
             .height(ComponentSize.BUTTON_HEIGHT)
             .borderRadius(Radius.SM)
-            .backgroundColor(Colors.BG_PRIMARY)
-            .fontColor(Colors.TEXT_PRIMARY)
-            .border({ width: 1, color: Colors.DIVIDER })
+            .backgroundColor(ResourceColors.BG_PRIMARY)
+            .fontColor(ResourceColors.TEXT_PRIMARY)
+            .border({ width: 1, color: ResourceColors.DIVIDER })
             .onClick(() => { this.onClose() })
           Button(this.isSubmitting ? '保存中...' : '保存', { type: ButtonType.Normal })
             .layoutWeight(1)
             .height(ComponentSize.BUTTON_HEIGHT)
             .borderRadius(Radius.SM)
-            .backgroundColor(Colors.PRIMARY)
-            .fontColor(Colors.TEXT_ON_PRIMARY)
+            .backgroundColor(ResourceColors.PRIMARY)
+            .fontColor(ResourceColors.TEXT_ON_PRIMARY)
             .enabled(!this.isSubmitting)
             .onClick(() => {
               this.onSave(this.formName, this.formDescription, this.formSystemPrompt)
@@ -168,7 +168,7 @@ export struct TemplateFormDialogComponent {
       }
       .width('100%')
       .height('85%')
-      .backgroundColor(Colors.BG_CARD)
+      .backgroundColor(ResourceColors.BG_CARD)
       .borderRadius({ topLeft: Radius.LG, topRight: Radius.LG })
       .position({ x: 0, y: '100%' })
       .translate({ y: this.show ? '-85%' : '0' })

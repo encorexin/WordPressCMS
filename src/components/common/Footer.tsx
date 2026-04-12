@@ -1,8 +1,4 @@
-import React from "react";
-
-const Footer: React.FC = () => {
-  const currentYear = new Date().getFullYear();
-
+const Footer = () => {
   return (
     <footer className="bg-gradient-to-r from-amber-50 to-orange-50 border-t border-amber-200">
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">

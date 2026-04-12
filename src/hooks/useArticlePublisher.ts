@@ -2,13 +2,14 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { updateArticleStatus } from "@/db/api";
 import type { WordPressSite, WordPressCategory } from "@/types/types";
-import { WordPressClient, type PublishOptions } from "@/utils/wordpressClient";
+import { WordPressClient, type PublishOptions } from "@/utils/wordpress";
 import { wpLogger } from "@/utils/logger";
 import { handleApiError } from "@/utils/errorHandler";
 
 export interface UseArticlePublisherOptions {
     articleId?: string;
     wpPostId?: string | null;
+    userId?: string;
     onPublished?: (postId: string) => void;
     onUpdated?: () => void;
 }
@@ -24,7 +25,7 @@ export function useArticlePublisher(options: UseArticlePublisherOptions) {
         const client = new WordPressClient(site);
         const result = await client.getCategories();
 
-        if (result.success) {
+        if (result.success === true) {
             setCategories(result.data);
         } else {
             wpLogger.error("加载分类失败:", result.error.message);
@@ -52,7 +53,7 @@ export function useArticlePublisher(options: UseArticlePublisherOptions) {
                     slug: postSlug || undefined,
                 };
 
-                let result;
+                let result: Awaited<ReturnType<WordPressClient["createPost"]>>;
 
                 if (options.wpPostId) {
                     result = await client.updatePost(
@@ -62,29 +63,30 @@ export function useArticlePublisher(options: UseArticlePublisherOptions) {
                         publishOptions
                     );
 
-                    if (result.success && options.articleId) {
-                        await updateArticleStatus(options.articleId, "published");
+                    if (result.success === true && options.articleId && options.userId) {
+                        await updateArticleStatus(options.userId, options.articleId, "published");
                         toast.success("更新发布成功");
                         options.onUpdated?.();
                     }
                 } else {
                     result = await client.createPost(title, content, publishOptions);
 
-                    if (result.success && options.articleId) {
+                    if (result.success === true && options.articleId && options.userId) {
                         const postId = String(result.data.id);
-                        await updateArticleStatus(options.articleId, "published", postId);
+                        await updateArticleStatus(options.userId, options.articleId, "published", postId);
                         toast.success("发布成功");
                         options.onPublished?.(postId);
                     }
                 }
 
-                if (!result.success) {
+                if (result.success === false) {
                     toast.error(result.error.message);
+                    return { success: false };
                 }
 
                 return {
-                    success: result.success,
-                    postId: result.success ? String(result.data.id) : undefined,
+                    success: true,
+                    postId: String(result.data.id),
                 };
             } catch (error) {
                 handleApiError(error, "发布文章");

@@ -88,13 +88,23 @@ pnpm build:extension
 - Android SDK (API 33+)
 - JDK 17+
 
-### 构建 Debug APK
+### 同步 Android 工程资源
 
 ```bash
 # 构建 Web 应用并同步到 Android
 pnpm build:apk
 
-# 或使用 Gradle 直接构建
+# 等价脚本：当前同样只会执行 Web 构建 + Cap sync
+pnpm build:aab
+```
+
+> 当前 `pnpm build:apk` 和 `pnpm build:aab` 都只会执行 `pnpm build && npx cap sync android`，
+> 用于把最新 Web 资源同步到 Capacitor Android 工程，不会直接产出 APK / AAB。
+
+### 构建 Debug APK
+
+```bash
+# 先同步 Web 资源，再使用 Gradle 打包
 cd android
 ./gradlew assembleDebug
 ```
@@ -128,6 +138,9 @@ cd android
 ### 构建 AAB (上架 Google Play)
 
 ```bash
+# 如有需要，先同步 Web 资源
+pnpm build:aab
+
 cd android
 ./gradlew bundleRelease
 ```
@@ -191,7 +204,8 @@ hvigorw assembleApp --mode release
 | `pnpm dev` | 启动 Web 开发服务器 |
 | `pnpm build` | 构建 Web 应用 |
 | `pnpm build:extension` | 构建浏览器扩展 |
-| `pnpm build:apk` | 构建 Android APK |
+| `pnpm build:apk` | 构建 Web 并同步 Android 工程 |
+| `pnpm build:aab` | 构建 Web 并同步 Android 工程 |
 | `pnpm cap:sync` | 同步 Capacitor 资源 |
 | `pnpm cap:open` | 打开 Android Studio |
 

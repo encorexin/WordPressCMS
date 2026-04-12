@@ -16,6 +16,7 @@ export class AISettingsModel {
   imageEnabled: boolean = false
   slugModel: string = ''
   slugEnabled: boolean = true
+  tokensUsed: number = 0
   createdAt: string = ''
   updatedAt: string = ''
 }
